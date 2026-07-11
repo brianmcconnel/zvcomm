@@ -45,13 +45,13 @@ final mgr = TransportManager(transports);
 
 | Id | Package | Default |
 |----|---------|---------|
-| `builtin.ble` | zvcomm_ble | on |
-| `builtin.nfc` | zvcomm_nfc | on |
-| `builtin.wifi` | zvcomm_wifi | on |
-| `builtin.mock` | zvcomm_core | off (options.medium) |
-| `builtin.hardware_adapter` | zvcomm_core | off (options.adapter) |
-| `builtin.uwb.stub` | zvcomm_core | off |
-| `builtin.lora.stub` | zvcomm_core | off |
+| `builtin.ble` | ble | on |
+| `builtin.nfc` | nfc | on |
+| `builtin.wifi` | wifi | on |
+| `builtin.mock` | core | off (options.medium) |
+| `builtin.hardware_adapter` | core | off (options.adapter) |
+| `builtin.uwb.stub` | core | off |
+| `builtin.lora.stub` | core | off |
 
 ## Hot-plug
 
@@ -95,11 +95,11 @@ registry.register(SimpleTransportPlugin(
 
 ## Third-party packages
 
-Create a Dart/Flutter package that depends on `zvcomm_core`, exports
+Create a Dart/Flutter package that depends on `core`, exports
 `void registerMyPlugin()`, and document that hosts must call it at startup
 before `MeshController.bootstrap()`.
 
 ## Testing
 
-See `packages/zvcomm_core/test` — registry ordering, hot-plug, hardware loopback
+See `packages/core/test` — registry ordering, hot-plug, hardware loopback
 mesh chat.

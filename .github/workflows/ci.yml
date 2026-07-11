@@ -35,17 +35,17 @@ jobs:
 
       - name: Test pure-Dart packages
         run: |
-          dart test packages/zvcomm_core
-          dart test packages/zvcomm_pki
-          dart test packages/zvcomm_sim
-          dart test apps/zvcomm_cli
+          dart test packages/core
+          dart test packages/pki
+          dart test packages/sim
+          dart test apps/cli
 
       - name: Test Flutter transport packages
         run: |
-          cd packages/zvcomm_ble && flutter test
-          cd ../../packages/zvcomm_nfc && flutter test
-          cd ../../packages/zvcomm_wifi && flutter test
-          cd ../../packages/zvcomm_ui && flutter test
+          cd packages/ble && flutter test
+          cd ../../packages/nfc && flutter test
+          cd ../../packages/wifi && flutter test
+          cd ../../packages/ui && flutter test
 
       - name: License gate
         run: dart run tool/license_check.dart
@@ -64,16 +64,16 @@ jobs:
       - name: Pub get
         run: |
           dart pub get
-          cd apps/zvcomm_app && flutter pub get
+          cd apps/app && flutter pub get
 
       - name: Analyze app
-        run: cd apps/zvcomm_app && flutter analyze
+        run: cd apps/app && flutter analyze
 
       - name: Widget tests
-        run: cd apps/zvcomm_app && flutter test
+        run: cd apps/app && flutter test
 
       - name: Linux release build
         run: |
           sudo apt-get update -y
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
-          cd apps/zvcomm_app && flutter build linux --release
+          cd apps/app && flutter build linux --release

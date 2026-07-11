@@ -25,7 +25,7 @@ scripts:
     description: Run tests in all packages
 
   test:core:
-    run: cd packages/zvcomm_core && dart test
+    run: cd packages/core && dart test
     description: Run core package tests only
 
   format:

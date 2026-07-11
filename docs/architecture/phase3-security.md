@@ -50,11 +50,11 @@ Mobile: wire `flutter_secure_storage` (MIT) behind `IdentityStore` in a later pa
 ## CLI
 
 ```bash
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart identity --seed alice --name Alice
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart ca-init --out ca.json
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart ca-issue --ca ca.json --subject-seed phone --name Phone
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart enroll --seed phone --ca ca.json --out-cert cert.json
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart noise-demo
+dart run apps/cli/bin/cli.dart identity --seed alice --name Alice
+dart run apps/cli/bin/cli.dart ca-init --out ca.json
+dart run apps/cli/bin/cli.dart ca-issue --ca ca.json --subject-seed phone --name Phone
+dart run apps/cli/bin/cli.dart enroll --seed phone --ca ca.json --out-cert cert.json
+dart run apps/cli/bin/cli.dart noise-demo
 ```
 
 ## Threat notes

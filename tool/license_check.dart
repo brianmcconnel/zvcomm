@@ -37,7 +37,7 @@ const bannedTokens = <String>[
 
 /// Packages we explicitly own / path-depend (no pub license needed).
 const pathPackagePrefixes = <String>[
-  'zvcomm_',
+  'core', 'ble', 'nfc', 'wifi', 'pki', 'sim', 'ui', 'app', 'cli',
 ];
 
 Future<void> main(List<String> args) async {

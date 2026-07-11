@@ -5,15 +5,15 @@ environment:
 
 # Dart pub workspace (Flutter 3.16+ / Dart 3.5+)
 workspace:
-  - packages/zvcomm_core
-  - packages/zvcomm_ble
-  - packages/zvcomm_nfc
-  - packages/zvcomm_wifi
-  - packages/zvcomm_pki
-  - packages/zvcomm_sim
-  - packages/zvcomm_ui
-  - apps/zvcomm_app
-  - apps/zvcomm_cli
+  - packages/core
+  - packages/ble
+  - packages/nfc
+  - packages/wifi
+  - packages/pki
+  - packages/sim
+  - packages/ui
+  - apps/app
+  - apps/cli
 
 dev_dependencies:
   melos: ^6.3.2

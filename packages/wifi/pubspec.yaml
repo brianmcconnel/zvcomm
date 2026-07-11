@@ -1,0 +1,27 @@
+name: wifi
+description: Wi-Fi Direct / SoftAP / LAN fallback transport for ZVComm.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+  flutter: '>=3.22.0'
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  core:
+    path: ../core
+  flutter_p2p_connection: ^3.0.3
+  permission_handler: ^11.3.1
+  network_info_plus: ^6.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  test: ^1.25.0
+
+flutter:
+  uses-material-design: false

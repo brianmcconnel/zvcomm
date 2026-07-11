@@ -29,18 +29,18 @@ Transport abstraction
 ```
 zvcomm/
 ├── packages/
-│   ├── zvcomm_core/     # Transport API, mesh, models, identity
-│   ├── zvcomm_ble/      # BLE transport (stub → Phase 1)
-│   ├── zvcomm_nfc/      # NFC transport (stub → Phase 1)
-│   ├── zvcomm_wifi/     # Wi-Fi P2P transport (stub → Phase 1)
-│   ├── zvcomm_pki/      # PKI / local CA skeleton
-│   ├── zvcomm_sim/      # Mesh simulator
-│   └── zvcomm_ui/       # Shared Flutter widgets
+│   ├── core/    # Transport API, mesh, models, identity, plugins
+│   ├── ble/     # Bluetooth LE transport
+│   ├── nfc/     # NFC transport
+│   ├── wifi/    # Wi-Fi P2P / LAN transport
+│   ├── pki/     # PKI / certificates
+│   ├── sim/     # Mesh simulator
+│   └── ui/      # Shared Flutter widgets
 ├── apps/
-│   ├── zvcomm_app/      # Main Flutter app
-│   └── zvcomm_cli/      # PKI + simulator CLI
+│   ├── app/     # Main Flutter app
+│   └── cli/     # PKI + sim CLI (`dart run` / `zvcomm`)
 ├── docs/
-├── tool/license_check.dart
+├── tool/
 └── melos.yaml
 ```
 
@@ -61,24 +61,24 @@ export PATH="$HOME/flutter/bin:$PATH"
 dart pub get
 
 # Core unit tests
-dart test packages/zvcomm_core
+dart test packages/core
 
 # Simulator CLI
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart sim --topology line --nodes 20 --range 40
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart sim --topology grid --rows 5 --cols 5
+dart run apps/cli/bin/cli.dart sim --topology line --nodes 20 --range 40
+dart run apps/cli/bin/cli.dart sim --topology grid --rows 5 --cols 5
 
 # Generate an Ed25519/X25519 identity
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart identity --name Alice --seed alice
+dart run apps/cli/bin/cli.dart identity --name Alice --seed alice
 
 # CA + enroll
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart ca-init --out ca.json
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart enroll --seed phone --name Phone --ca ca.json --out-cert cert.json
+dart run apps/cli/bin/cli.dart ca-init --out ca.json
+dart run apps/cli/bin/cli.dart enroll --seed phone --name Phone --ca ca.json --out-cert cert.json
 
 # Secure session demo
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart noise-demo
+dart run apps/cli/bin/cli.dart noise-demo
 
 # Run the Flutter app (mock discovery demo)
-cd apps/zvcomm_app && flutter run -d linux   # or chrome, windows, macos, …
+cd apps/app && flutter run -d linux   # or chrome, windows, macos, …
 ```
 
 ### Melos (optional)

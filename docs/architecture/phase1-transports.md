@@ -1,6 +1,6 @@
 # Phase 1 – Transports
 
-## BLE (`zvcomm_ble`)
+## BLE (`ble`)
 
 | Item | Choice |
 |------|--------|
@@ -21,7 +21,7 @@ Frames use length-prefixed binary (`StreamFrameCodec`) and are chunked to the ne
 
 **Power modes** map to scan duty cycle (continuous / periodic / rare burst).
 
-## NFC (`zvcomm_nfc`)
+## NFC (`nfc`)
 
 | Item | Choice |
 |------|--------|
@@ -31,7 +31,7 @@ Frames use length-prefixed binary (`StreamFrameCodec`) and are chunked to the ne
 
 NDEF MIME type: `application/x-zvcomm` carrying JSON identity (+ optional data).
 
-## Wi-Fi (`zvcomm_wifi`)
+## Wi-Fi (`wifi`)
 
 | Backend | When | License |
 |---------|------|---------|
@@ -42,7 +42,7 @@ LAN SoftAP fallback: UDP broadcast discovery + TCP framed links (same `StreamFra
 
 ## Permissions
 
-See Android `AndroidManifest.xml` and iOS `Info.plist` in `apps/zvcomm_app`.
+See Android `AndroidManifest.xml` and iOS `Info.plist` in `apps/app`.
 
 ## Testing without radios
 

@@ -17,19 +17,19 @@ Transport abstraction (send/recv/discover)
 
 | Package | Role |
 |---------|------|
-| `zvcomm_core` | Transport interface, mesh, models, identity |
-| `zvcomm_ble` | BLE backend (Phase 1) |
-| `zvcomm_nfc` | NFC backend (Phase 1) |
-| `zvcomm_wifi` | Wi-Fi P2P backend (Phase 1) |
-| `zvcomm_pki` | CA / certificates |
-| `zvcomm_sim` | Discrete-event / multi-node simulator |
-| `zvcomm_ui` | Shared Flutter widgets |
-| `zvcomm_app` | Main multi-platform app |
-| `zvcomm_cli` | PKI + sim CLI |
+| `core` | Transport interface, mesh, models, identity |
+| `ble` | BLE backend (Phase 1) |
+| `nfc` | NFC backend (Phase 1) |
+| `wifi` | Wi-Fi P2P backend (Phase 1) |
+| `pki` | CA / certificates |
+| `sim` | Discrete-event / multi-node simulator |
+| `ui` | Shared Flutter widgets |
+| `app` | Main multi-platform app |
+| `cli` | PKI + sim CLI |
 
 ## Transport interface
 
-All radios implement `Transport` in `zvcomm_core`:
+All radios implement `Transport` in `core`:
 
 - `discover()` → `Stream<Peer>`
 - `connect(Peer)` → `Connection`

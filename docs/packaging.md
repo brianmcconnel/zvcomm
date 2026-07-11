@@ -2,7 +2,7 @@
 
 ## Versioning
 
-App version lives in `apps/zvcomm_app/pubspec.yaml` (`version: X.Y.Z+build`).
+App version lives in `apps/app/pubspec.yaml` (`version: X.Y.Z+build`).
 
 | Platform | Artifact |
 |----------|----------|
@@ -16,7 +16,7 @@ App version lives in `apps/zvcomm_app/pubspec.yaml` (`version: X.Y.Z+build`).
 
 ```bash
 export PATH="$HOME/flutter/bin:$PATH"
-cd apps/zvcomm_app
+cd apps/app
 
 flutter build apk --release
 flutter build appbundle --release
