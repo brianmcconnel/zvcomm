@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:args/args.dart';
 import 'package:zvcomm_core/zvcomm_core.dart';
@@ -13,14 +14,38 @@ Future<void> main(List<String> arguments) async {
       'identity',
       ArgParser()
         ..addOption('name', abbr: 'n', defaultsTo: 'device', help: 'Display name')
-        ..addOption('seed', abbr: 's', help: 'Deterministic seed (tests only)'),
+        ..addOption('seed', abbr: 's', help: 'Deterministic seed (tests only)')
+        ..addOption('out', help: 'Write identity JSON (includes private keys)'),
+    )
+    ..addCommand(
+      'ca-init',
+      ArgParser()
+        ..addOption('name', defaultsTo: 'ZVComm Root')
+        ..addOption('out', defaultsTo: 'ca-identity.json'),
     )
     ..addCommand(
       'ca-issue',
       ArgParser()
-        ..addOption('subject-seed', defaultsTo: 'device', help: 'Subject seed')
-        ..addOption('name', defaultsTo: 'device', help: 'Subject display name')
-        ..addOption('days', defaultsTo: '30', help: 'Certificate TTL in days'),
+        ..addOption('ca', help: 'CA identity JSON path')
+        ..addOption('subject-seed', defaultsTo: 'device')
+        ..addOption('name', defaultsTo: 'device')
+        ..addOption('days', defaultsTo: '30')
+        ..addOption('out', help: 'Write certificate JSON'),
+    )
+    ..addCommand(
+      'enroll',
+      ArgParser()
+        ..addOption('seed', defaultsTo: 'device')
+        ..addOption('name', defaultsTo: 'device')
+        ..addOption('ca', help: 'CA identity JSON (issues immediately)')
+        ..addOption('out-req', help: 'Write enrollment request JSON')
+        ..addOption('out-cert', help: 'Write issued certificate JSON'),
+    )
+    ..addCommand(
+      'noise-demo',
+      ArgParser()
+        ..addOption('alice-seed', defaultsTo: 'alice')
+        ..addOption('bob-seed', defaultsTo: 'bob'),
     )
     ..addCommand(
       'sim',
@@ -29,17 +54,16 @@ Future<void> main(List<String> arguments) async {
           'topology',
           defaultsTo: 'line',
           allowed: ['line', 'grid', 'random', 'bridge'],
-          help: 'Topology: line|grid|random|bridge',
         )
-        ..addOption('nodes', defaultsTo: '5', help: 'Node count (line/random)')
-        ..addOption('rows', defaultsTo: '4', help: 'Grid rows')
-        ..addOption('cols', defaultsTo: '4', help: 'Grid cols')
-        ..addOption('spacing', defaultsTo: '20', help: 'Node spacing')
-        ..addOption('range', defaultsTo: '40', help: 'Radio range meters')
-        ..addOption('loss', defaultsTo: '0', help: 'Packet loss 0..1')
-        ..addFlag('mobility', defaultsTo: false, help: 'Enable random-walk mobility')
-        ..addFlag('presence', defaultsTo: false, help: 'Collect presence events')
-        ..addOption('broadcasts', defaultsTo: '1', help: 'Number of broadcasts'),
+        ..addOption('nodes', defaultsTo: '5')
+        ..addOption('rows', defaultsTo: '4')
+        ..addOption('cols', defaultsTo: '4')
+        ..addOption('spacing', defaultsTo: '20')
+        ..addOption('range', defaultsTo: '40')
+        ..addOption('loss', defaultsTo: '0')
+        ..addFlag('mobility', defaultsTo: false)
+        ..addFlag('presence', defaultsTo: false)
+        ..addOption('broadcasts', defaultsTo: '1'),
     )
     ..addCommand('version', ArgParser());
 
@@ -60,11 +84,17 @@ Future<void> main(List<String> arguments) async {
 
   switch (results.command!.name) {
     case 'version':
-      stdout.writeln('zvcomm_cli 0.2.0 (Phase 2)');
+      stdout.writeln('zvcomm_cli 0.3.0 (Phase 3)');
     case 'identity':
-      _cmdIdentity(results.command!);
+      await _cmdIdentity(results.command!);
+    case 'ca-init':
+      await _cmdCaInit(results.command!);
     case 'ca-issue':
-      _cmdCaIssue(results.command!);
+      await _cmdCaIssue(results.command!);
+    case 'enroll':
+      await _cmdEnroll(results.command!);
+    case 'noise-demo':
+      await _cmdNoiseDemo(results.command!);
     case 'sim':
       await _cmdSim(results.command!);
     default:
@@ -75,46 +105,144 @@ Future<void> main(List<String> arguments) async {
 
 void _usage(ArgParser parser) {
   stdout.writeln('''
-ZVComm CLI — PKI helpers and mesh simulator
-
-Usage:
-  dart run zvcomm_cli <command> [options]
+ZVComm CLI — PKI, secure sessions, mesh simulator
 
 Commands:
-  identity   Generate a device identity (placeholder keys)
-  ca-issue   Issue a placeholder mesh certificate from a local CA
-  sim        Run mesh simulation (line|grid|random|bridge)
-  version    Print version
+  identity    Generate X25519/Ed25519 device identity
+  ca-init     Create a root CA identity file
+  ca-issue    Issue an Ed25519 mesh certificate
+  enroll      Create enrollment request (and optionally issue)
+  noise-demo  Run initiator/responder handshake + AEAD round-trip
+  sim         Mesh simulation
+  version
 
 ${parser.usage}
 ''');
 }
 
-void _cmdIdentity(ArgResults cmd) {
+Future<void> _cmdIdentity(ArgResults cmd) async {
   final name = cmd['name'] as String;
   final seed = cmd['seed'] as String?;
   final id = seed != null
-      ? DeviceIdentity.fromSeed(seed, displayName: name)
-      : DeviceIdentity.generate(displayName: name);
+      ? await DeviceIdentity.fromSeed(seed, displayName: name)
+      : await DeviceIdentity.generate(displayName: name);
+  final json = id.toJson(includePrivate: cmd['out'] != null);
+  final text = const JsonEncoder.withIndent('  ').convert(json);
+  stdout.writeln(text);
+  final out = cmd['out'] as String?;
+  if (out != null) {
+    await File(out).writeAsString(text);
+  }
+}
+
+Future<void> _cmdCaInit(ArgResults cmd) async {
+  final ca = await LocalCa.generate(displayName: cmd['name'] as String);
+  final path = cmd['out'] as String;
+  final store = FileIdentityStore.path(path);
+  await store.save(StoredIdentity(identity: ca.root));
   stdout.writeln(const JsonEncoder.withIndent('  ').convert({
-    'id': id.id,
-    'displayName': id.displayName,
-    'publicKey': base64Url.encode(id.publicKeyBytes),
+    'caId': ca.root.id,
+    'displayName': ca.root.displayName,
+    'path': path,
   }));
 }
 
-void _cmdCaIssue(ArgResults cmd) {
-  final ca = LocalCa.generate(displayName: 'ZVComm Root');
-  final subject = DeviceIdentity.fromSeed(
+Future<DeviceIdentity> _loadIdentity(String path) async {
+  final store = FileIdentityStore.path(path);
+  final stored = await store.load();
+  if (stored == null) {
+    throw StateError('identity not found: $path');
+  }
+  return stored.identity;
+}
+
+Future<void> _cmdCaIssue(ArgResults cmd) async {
+  final LocalCa ca;
+  final caPath = cmd['ca'] as String?;
+  if (caPath != null) {
+    ca = LocalCa(root: await _loadIdentity(caPath));
+  } else {
+    ca = await LocalCa.generate(displayName: 'ZVComm Root');
+  }
+  final subject = await DeviceIdentity.fromSeed(
     cmd['subject-seed'] as String,
     displayName: cmd['name'] as String,
   );
   final days = int.parse(cmd['days'] as String);
-  final cert = ca.issueFor(subject, ttl: Duration(days: days));
-  stdout.writeln(const JsonEncoder.withIndent('  ').convert({
+  final cert = await ca.issueFor(subject, ttl: Duration(days: days));
+  final payload = {
     'caId': ca.root.id,
     'certificate': cert.toJson(),
-    'verified': ca.verify(cert),
+    'verified': await ca.verify(cert),
+  };
+  final text = const JsonEncoder.withIndent('  ').convert(payload);
+  stdout.writeln(text);
+  final out = cmd['out'] as String?;
+  if (out != null) {
+    await File(out).writeAsString(
+      const JsonEncoder.withIndent('  ').convert(cert.toJson()),
+    );
+  }
+}
+
+Future<void> _cmdEnroll(ArgResults cmd) async {
+  final device = await DeviceIdentity.fromSeed(
+    cmd['seed'] as String,
+    displayName: cmd['name'] as String,
+  );
+  final req = await EnrollmentService.createRequest(device);
+  final reqJson = const JsonEncoder.withIndent('  ').convert(req.toJson());
+  final outReq = cmd['out-req'] as String?;
+  if (outReq != null) {
+    await File(outReq).writeAsString(reqJson);
+  } else {
+    stdout.writeln(reqJson);
+  }
+
+  final caPath = cmd['ca'] as String?;
+  if (caPath == null) return;
+
+  final ca = LocalCa(root: await _loadIdentity(caPath));
+  final svc = EnrollmentService(ca);
+  final resp = await svc.processRequest(req);
+  final cert = MeshCertificate.fromJsonString(resp.certificateJson);
+  final outCert = cmd['out-cert'] as String?;
+  final certText =
+      const JsonEncoder.withIndent('  ').convert(cert.toJson());
+  if (outCert != null) {
+    await File(outCert).writeAsString(certText);
+  }
+  stdout.writeln(const JsonEncoder.withIndent('  ').convert({
+    'enrolled': true,
+    'subjectId': cert.subjectId,
+    'verified': await ca.verify(cert),
+  }));
+}
+
+Future<void> _cmdNoiseDemo(ArgResults cmd) async {
+  final alice =
+      await DeviceIdentity.fromSeed(cmd['alice-seed'] as String, displayName: 'Alice');
+  final bob =
+      await DeviceIdentity.fromSeed(cmd['bob-seed'] as String, displayName: 'Bob');
+
+  final hsA = Handshake(alice);
+  final init = await hsA.createInitiation();
+  final accepted = await Handshake(bob).acceptInitiation(init);
+  final sessionA = await hsA.finish(accepted.response);
+  final sessionB = accepted.session;
+
+  final cipher =
+      await sessionA.seal(Uint8List.fromList(utf8.encode('hello secure mesh')));
+  final clear = await sessionB.open(cipher);
+
+  stdout.writeln(const JsonEncoder.withIndent('  ').convert({
+    'aliceId': alice.id,
+    'bobId': bob.id,
+    'handshakeInitBytes': init.length,
+    'handshakeRespBytes': accepted.response.length,
+    'cipherBytes': cipher.length,
+    'plaintext': utf8.decode(clear),
+    'ok': utf8.decode(clear) == 'hello secure mesh',
   }));
 }
 

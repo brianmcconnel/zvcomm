@@ -38,14 +38,14 @@ class PeerDiscoveryPage extends StatefulWidget {
 }
 
 class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
-  late final DeviceIdentity _identity;
+  DeviceIdentity? _identity;
   late final BleTransport _ble;
   late final NfcTransport _nfc;
   late final WifiTransport _wifi;
   late final MockMedium _medium;
-  late final MockTransport _mockTransport;
-  late final MockTransport _demoPeerTransport;
-  late final MeshNode _node;
+  MockTransport? _mockTransport;
+  MockTransport? _demoPeerTransport;
+  MeshNode? _node;
 
   StreamSubscription<Peer>? _peerSub;
   final Map<String, Peer> _peers = {};
@@ -54,19 +54,26 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
   final bool _useMockDemo = true;
   TransportPowerMode _powerMode = TransportPowerMode.balanced;
   String? _status;
+  bool _ready = false;
 
   @override
   void initState() {
     super.initState();
-    _identity = DeviceIdentity.generate(displayName: 'This device');
     _ble = BleTransport();
     _nfc = NfcTransport();
     _wifi = WifiTransport();
     _medium = MockMedium();
+    unawaited(_bootstrap());
+  }
+
+  Future<void> _bootstrap() async {
+    final identity =
+        await DeviceIdentity.generate(displayName: 'This device');
+    _identity = identity;
     _mockTransport = MockTransport(
       medium: _medium,
-      localId: _identity.id,
-      displayName: _identity.displayName,
+      localId: identity.id,
+      displayName: identity.displayName,
       position: const SimPoint(0, 0),
     );
     _demoPeerTransport = MockTransport(
@@ -75,20 +82,20 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
       displayName: 'Demo Peer',
       position: const SimPoint(8, 0),
     );
-
     _node = MeshNode(
-      localId: _identity.id,
-      displayName: _identity.displayName,
+      localId: identity.id,
+      displayName: identity.displayName,
       transports: TransportManager([
         _ble,
         _nfc,
         _wifi,
-        _mockTransport,
+        _mockTransport!,
       ]),
     );
-
-    unawaited(_probeAvailability());
-    unawaited(_start());
+    if (!mounted) return;
+    setState(() => _ready = true);
+    await _probeAvailability();
+    await _start();
   }
 
   Future<void> _probeAvailability() async {
@@ -103,20 +110,23 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
   }
 
   Future<void> _start() async {
+    final node = _node;
+    final demo = _demoPeerTransport;
+    if (node == null || demo == null) return;
     setState(() => _status = 'Starting discovery…');
     if (_useMockDemo) {
-      await _demoPeerTransport.startAdvertising(
+      await demo.startAdvertising(
         localId: 'demo-peer-01',
         displayName: 'Demo Peer',
         metadata: {'demo': 'true'},
       );
     }
-    _peerSub = _node.peerUpdates.listen((peer) {
+    _peerSub = node.peerUpdates.listen((peer) {
       if (!mounted) return;
       setState(() => _peers[peer.id] = peer);
     });
-    await _node.transports.setPowerMode(_powerMode);
-    await _node.start();
+    await node.transports.setPowerMode(_powerMode);
+    await node.start();
     if (!mounted) return;
     final active = _available.entries
         .where((e) => e.value)
@@ -126,15 +136,17 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
       _running = true;
       _status = 'Scanning: ${active.isEmpty ? "none" : active}'
           '${_useMockDemo ? " + mock demo" : ""}'
-          ' · power=${_powerMode.name}';
+          ' · power=${_powerMode.name} · Ed25519/X25519 identity';
     });
   }
 
   Future<void> _stop() async {
+    final node = _node;
+    final demo = _demoPeerTransport;
     await _peerSub?.cancel();
     _peerSub = null;
-    await _node.stop();
-    await _demoPeerTransport.stopAdvertising();
+    await node?.stop();
+    await demo?.stopAdvertising();
     if (!mounted) return;
     setState(() {
       _running = false;
@@ -143,6 +155,7 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
   }
 
   Future<void> _toggle() async {
+    if (!_ready) return;
     if (_running) {
       await _stop();
     } else {
@@ -151,10 +164,12 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
   }
 
   Future<void> _cyclePowerMode() async {
+    final node = _node;
+    if (node == null) return;
     const modes = TransportPowerMode.values;
     final next = modes[(_powerMode.index + 1) % modes.length];
     _powerMode = next;
-    await _node.transports.setPowerMode(next);
+    await node.transports.setPowerMode(next);
     if (!mounted) return;
     setState(() {
       _status = 'Power mode → ${next.name}';
@@ -164,18 +179,25 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
   @override
   void dispose() {
     // Cancel discovery/announce timers before async dispose (widget tests).
-    _mockTransport.cancelDiscoverySync();
-    _demoPeerTransport.cancelDiscoverySync();
+    _mockTransport?.cancelDiscoverySync();
+    _demoPeerTransport?.cancelDiscoverySync();
     _wifi.cancelTimersSync();
     unawaited(_peerSub?.cancel());
-    unawaited(_node.dispose());
-    unawaited(_demoPeerTransport.dispose());
+    unawaited(_node?.dispose());
+    unawaited(_demoPeerTransport?.dispose());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final peerList = _peers.values.toList();
+    final identity = _identity;
+
+    if (!_ready || identity == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -211,11 +233,11 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _identity.displayName,
+                    identity.displayName,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   SelectableText(
-                    _identity.id,
+                    identity.id,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),

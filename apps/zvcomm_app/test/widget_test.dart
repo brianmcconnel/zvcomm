@@ -5,8 +5,10 @@ import 'package:zvcomm_app/main.dart';
 void main() {
   testWidgets('app shows ZVComm title and local identity', (tester) async {
     await tester.pumpWidget(const ZvcommApp());
-    await tester.pump(); // schedule _start
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(); // schedule bootstrap
+    // Allow async key generation + discovery start.
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('ZVComm'), findsOneWidget);
     expect(find.text('Local identity'), findsOneWidget);

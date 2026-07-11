@@ -1,5 +1,7 @@
-/// PKI helpers for ZVComm (Phase 0 skeleton; Phase 3 adds full CA tooling).
+/// PKI tooling for ZVComm: Ed25519 certificates, CA, enrollment, revocation.
 library;
 
 export 'src/certificate.dart';
-export 'src/ca_skeleton.dart';
+export 'src/ca.dart';
+export 'src/revocation.dart';
+export 'src/enrollment_service.dart';

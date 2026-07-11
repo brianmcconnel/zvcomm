@@ -9,7 +9,7 @@ Bluetooth LE · NFC · Wi-Fi P2P · pluggable transports · offline-first · per
 | **License** | Apache-2.0 |
 | **Stack** | Flutter + Dart (AOT) |
 | **Platforms** | Android, iOS, Linux, macOS, Windows |
-| **Status** | Phase 2 – Mesh + Simulator |
+| **Status** | Phase 3 – Security & PKI |
 
 ## Architecture
 
@@ -120,6 +120,19 @@ See [docs/architecture/phase1-transports.md](docs/architecture/phase1-transports
 - [x] CLI topologies (`--topology line|grid|random|bridge`)
 
 See [docs/architecture/phase2-mesh.md](docs/architecture/phase2-mesh.md).
+
+## Phase 3 deliverables
+
+- [x] X25519 + Ed25519 device identities (`cryptography`, Apache-2.0)
+- [x] ZVComm Handshake v1 + ChaCha20-Poly1305 sessions
+- [x] `SecureMesh` E2E façade over mesh control/chat
+- [x] Ed25519 mesh certificates + local CA
+- [x] Enrollment request/response (NFC/QR/BLE ready)
+- [x] Signed revocation lists
+- [x] `MemoryIdentityStore` / `FileIdentityStore`
+- [x] CLI: `ca-init`, `ca-issue`, `enroll`, `noise-demo`
+
+See [docs/architecture/phase3-security.md](docs/architecture/phase3-security.md).
 
 ## Development phases
 

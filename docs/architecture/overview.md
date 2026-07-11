@@ -47,8 +47,11 @@ All radios implement `Transport` in `zvcomm_core`:
 
 See [phase2-mesh.md](phase2-mesh.md).
 
-## Security (Phase 0 placeholder)
+## Security (Phase 3)
 
-`DeviceIdentity` uses SHA-256 derived material for stable IDs only.
+- X25519 + Ed25519 identities (`cryptography`, Apache-2.0)
+- ZVComm Handshake v1 + ChaCha20-Poly1305 E2E sessions
+- Ed25519 mesh certificates, enrollment, signed CRLs
+- `IdentityStore` (memory / file); mobile keystore later
 
-Phase 3: Noise Protocol sessions, real keys, `LocalCa` → production CA / CFSSL.
+See [phase3-security.md](phase3-security.md).

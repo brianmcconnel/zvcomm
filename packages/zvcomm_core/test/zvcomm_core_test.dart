@@ -296,11 +296,53 @@ void main() {
   });
 
   group('DeviceIdentity', () {
-    test('fromSeed is deterministic', () {
-      final a = DeviceIdentity.fromSeed('test', displayName: 'T');
-      final b = DeviceIdentity.fromSeed('test', displayName: 'T');
+    test('fromSeed is deterministic', () async {
+      final a = await DeviceIdentity.fromSeed('test', displayName: 'T');
+      final b = await DeviceIdentity.fromSeed('test', displayName: 'T');
       expect(a.id, b.id);
-      expect(a.publicKeyBytes, b.publicKeyBytes);
+      expect(a.ed25519PublicKey, b.ed25519PublicKey);
+      expect(a.x25519PublicKey, b.x25519PublicKey);
+    });
+
+    test('sign and verify', () async {
+      final id = await DeviceIdentity.fromSeed('signer');
+      final msg = Uint8List.fromList(utf8.encode('hello'));
+      final sig = await id.sign(msg);
+      expect(await id.verify(msg, sig), isTrue);
+    });
+  });
+
+  group('SecureSession handshake', () {
+    test('initiator and responder establish AEAD channel', () async {
+      final alice = await DeviceIdentity.fromSeed('alice', displayName: 'A');
+      final bob = await DeviceIdentity.fromSeed('bob', displayName: 'B');
+
+      final hsA = Handshake(alice);
+      final init = await hsA.createInitiation();
+      final hsB = Handshake(bob);
+      final accepted = await hsB.acceptInitiation(init);
+      final sessionA = await hsA.finish(accepted.response);
+      final sessionB = accepted.session;
+
+      final cipher = await sessionA.seal(Uint8List.fromList(utf8.encode('ping')));
+      final clear = await sessionB.open(cipher);
+      expect(utf8.decode(clear), 'ping');
+
+      final cipher2 =
+          await sessionB.seal(Uint8List.fromList(utf8.encode('pong')));
+      final clear2 = await sessionA.open(cipher2);
+      expect(utf8.decode(clear2), 'pong');
+    });
+  });
+
+  group('IdentityStore', () {
+    test('memory store round-trip', () async {
+      final store = MemoryIdentityStore();
+      final id = await DeviceIdentity.fromSeed('stored');
+      await store.save(StoredIdentity(identity: id));
+      final loaded = await store.load();
+      expect(loaded!.identity.id, id.id);
+      expect(loaded.identity.ed25519PublicKey, id.ed25519PublicKey);
     });
   });
 

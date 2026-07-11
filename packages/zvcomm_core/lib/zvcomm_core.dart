@@ -20,6 +20,10 @@ export 'src/mesh/mesh_config.dart';
 export 'src/mesh/mesh_stats.dart';
 export 'src/mesh/presence.dart';
 export 'src/crypto/identity.dart';
+export 'src/crypto/secure_session.dart';
+export 'src/crypto/identity_store.dart';
+export 'src/crypto/enrollment.dart';
+export 'src/mesh/secure_mesh.dart';
 export 'src/protocol/uuids.dart';
 export 'src/protocol/frame_codec.dart';
 
