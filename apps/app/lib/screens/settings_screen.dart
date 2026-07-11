@@ -70,9 +70,16 @@ class SettingsScreen extends StatelessWidget {
           ),
         const SizedBox(height: 16),
         Text('About', style: Theme.of(context).textTheme.titleMedium),
-        const ListTile(
-          title: Text('ZVComm'),
-          subtitle: Text(
+        ListTile(
+          title: const ZvcommTitle(
+            'ZVComm',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.3,
+            ),
+          ),
+          subtitle: const Text(
             'Short-range mesh · Apache-2.0 · Phase 5\n'
             'Themes aligned with ZVBible · pluggable transports',
           ),

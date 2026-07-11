@@ -48,7 +48,7 @@ class _HomeShellState extends State<HomeShell> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ZVComm'),
+        title: const ZvcommTitle.appBar(),
         actions: [
           IconButton(
             tooltip: 'Cycle theme',

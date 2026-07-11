@@ -44,4 +44,17 @@ void main() {
       expect(theme.scaffoldBackgroundColor, p.bgApp);
     }
   });
+
+  testWidgets('ZvcommTitle paints gradient wordmark', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ZvcommTheme.dark(),
+        home: const Scaffold(
+          body: Center(child: ZvcommTitle.appBar()),
+        ),
+      ),
+    );
+    expect(find.text('ZVComm'), findsOneWidget);
+    expect(find.byType(ShaderMask), findsOneWidget);
+  });
 }
