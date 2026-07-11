@@ -92,6 +92,8 @@ dart pub global activate melos
 melos run get          # flutter pub get
 melos run test:core
 melos run license:check
+melos run static       # analyzer + format + license + gitleaks
+# or: ./scripts/static_analysis.sh
 ```
 
 ## Phase 0 deliverables
@@ -201,6 +203,7 @@ dart run tool/license_check.dart
 - [Architecture overview](docs/architecture/overview.md)
 - [Repository layout](docs/REPOSITORY_LAYOUT.md)
 - [CI builds (all platforms)](docs/CI_BUILDS.md)
+- [Static analysis](docs/STATIC_ANALYSIS.md)
 - [Packaging](docs/packaging.md)
 - [Project plan](docs/PROJECT_PLAN.md)
 - [License allow-list](docs/licenses/ALLOWLIST.md)

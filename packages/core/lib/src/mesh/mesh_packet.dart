@@ -83,7 +83,7 @@ final class MeshPacket {
 
   static MeshPacket decode(Uint8List data) {
     if (data.length < 10) {
-      throw FormatException('mesh packet too short');
+      throw const FormatException('mesh packet too short');
     }
     var o = 0;
     final ver = data[o++];
@@ -114,7 +114,7 @@ final class MeshPacket {
     final payloadLen = _readU16le(data, o);
     o += 2;
     if (o + payloadLen > data.length) {
-      throw FormatException('truncated payload');
+      throw const FormatException('truncated payload');
     }
     final payload = Uint8List.sublistView(data, o, o + payloadLen);
 

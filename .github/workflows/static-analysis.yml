@@ -1,0 +1,89 @@
+# Static analysis: Dart analyzer, format, license gate, secrets (gitleaks), CodeQL.
+name: Static analysis
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Weekly security re-scan
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: static-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  dart-flutter:
+    name: Dart / Flutter analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Workspace pub get
+        run: flutter pub get
+
+      - name: Format check
+        run: dart format --set-exit-if-changed --output=none .
+
+      - name: Analyze pure-Dart packages
+        run: |
+          dart analyze --fatal-infos packages/core packages/pki packages/sim apps/cli
+
+      - name: Analyze Flutter packages
+        run: |
+          (cd packages/ble && flutter analyze --fatal-infos)
+          (cd packages/nfc && flutter analyze --fatal-infos)
+          (cd packages/wifi && flutter analyze --fatal-infos)
+          (cd packages/ui && flutter analyze --fatal-infos)
+          (cd apps/app && flutter analyze --fatal-infos)
+
+      - name: License allow-list
+        run: dart run tool/license_check.dart
+
+  gitleaks:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: dart
+          # Security + quality for Dart monorepo
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:dart"

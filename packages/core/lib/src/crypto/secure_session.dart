@@ -59,10 +59,10 @@ final class SecureSession {
   /// Decrypt a wire frame produced by [seal].
   Future<Uint8List> open(Uint8List frame) async {
     if (frame.isEmpty || frame[0] != SecureWire.appData) {
-      throw FormatException('not app data frame');
+      throw const FormatException('not app data frame');
     }
     if (frame.length < 1 + 12 + 16) {
-      throw FormatException('app data frame too short');
+      throw const FormatException('app data frame too short');
     }
     final nonce = frame.sublist(1, 13);
     final mac = Mac(frame.sublist(frame.length - 16));
@@ -256,12 +256,12 @@ final class Handshake {
       })> _parseInit(Uint8List msg) async {
     var o = 0;
     if (msg.length < 2 + 32 * 3 + 1 + 64) {
-      throw FormatException('handshake init too short');
+      throw const FormatException('handshake init too short');
     }
     final ver = msg[o++];
     final type = msg[o++];
     if (ver != SecureWire.protocolVersion || type != SecureWire.handshakeInit) {
-      throw FormatException('bad handshake init header');
+      throw const FormatException('bad handshake init header');
     }
     final eph = msg.sublist(o, o + 32);
     o += 32;
@@ -281,7 +281,7 @@ final class Handshake {
         publicKey: SimplePublicKey(staticEd, type: KeyPairType.ed25519),
       ),
     );
-    if (!ok) throw FormatException('handshake init signature invalid');
+    if (!ok) throw const FormatException('handshake init signature invalid');
     return (eph: eph, staticX: staticX, staticEd: staticEd, id: id);
   }
 
@@ -296,12 +296,12 @@ final class Handshake {
       })> _parseResp(Uint8List msg) async {
     var o = 0;
     if (msg.length < 2 + 32 * 3 + 1 + 64 + 16) {
-      throw FormatException('handshake resp too short');
+      throw const FormatException('handshake resp too short');
     }
     final ver = msg[o++];
     final type = msg[o++];
     if (ver != SecureWire.protocolVersion || type != SecureWire.handshakeResp) {
-      throw FormatException('bad handshake resp header');
+      throw const FormatException('bad handshake resp header');
     }
     final eph = msg.sublist(o, o + 32);
     o += 32;
@@ -323,9 +323,9 @@ final class Handshake {
         publicKey: SimplePublicKey(staticEd, type: KeyPairType.ed25519),
       ),
     );
-    if (!ok) throw FormatException('handshake resp signature invalid');
+    if (!ok) throw const FormatException('handshake resp signature invalid');
     final rest = msg.sublist(o);
-    if (rest.length < 16) throw FormatException('missing confirm');
+    if (rest.length < 16) throw const FormatException('missing confirm');
     final confirmMac = rest.sublist(rest.length - 16);
     final confirmCipher = rest.sublist(0, rest.length - 16);
     return (

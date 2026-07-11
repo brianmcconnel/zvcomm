@@ -1,0 +1,28 @@
+# Gitleaks config for ZVComm.
+# Scan tracked sources only; allowlist crypto *identifier names* (not secrets).
+title = "zvcomm"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "False positives and generated paths"
+paths = [
+  '''(^|/)build/''',
+  '''(^|/)\.dart_tool/''',
+  '''(^|/)dist/''',
+  '''\.g\.dart$''',
+  '''pubspec\.lock$''',
+  '''\.png$''',
+  '''\.jar$''',
+]
+
+# Field/method names like ed25519PrivateKey, x25519PrivateKey — not secret values.
+regexes = [
+  '''ed25519PrivateKey''',
+  '''ed25519PublicKey''',
+  '''x25519PrivateKey''',
+  '''x25519PublicKey''',
+  '''privateKeyBytes''',
+  '''publicKeyBytes''',
+]

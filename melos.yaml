@@ -49,3 +49,7 @@ scripts:
   license:check:
     run: dart run tool/license_check.dart
     description: Verify all dependencies use permissive licenses only
+
+  static:
+    run: bash scripts/static_analysis.sh
+    description: Full static analysis suite (analyzer, format, license, gitleaks)

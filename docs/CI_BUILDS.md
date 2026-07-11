@@ -5,7 +5,10 @@
 | Workflow | File | Purpose |
 |----------|------|---------|
 | **CI** | `.github/workflows/ci.yml` | Format, analyze, unit/widget tests, license gate (`flutter pub get` only; no melos bootstrap) |
+| **Static analysis** | `.github/workflows/static-analysis.yml` | Strict analyzer, format, license, gitleaks secrets, CodeQL |
 | **Build** | `.github/workflows/build.yml` | Release binaries for all platforms + upload artifacts |
+
+See also [STATIC_ANALYSIS.md](STATIC_ANALYSIS.md).
 
 ## When builds run
 
