@@ -32,12 +32,6 @@ class SettingsScreen extends StatelessWidget {
           value: mesh.running,
           onChanged: (_) => mesh.toggleDiscovery(),
         ),
-        SwitchListTile(
-          title: const Text('Mock demo peer'),
-          subtitle: const Text('In-process peer for UI demos without radios'),
-          value: mesh.useMockDemo,
-          onChanged: mesh.setUseMockDemo,
-        ),
         const SizedBox(height: 16),
         Text(
           'Transport plugins',
@@ -93,6 +87,24 @@ class SettingsScreen extends StatelessWidget {
             '${mesh.transportManager?.transports.length ?? 0} · '
             '${mesh.transportManager?.transports.map((t) => t.name).join(", ") ?? "—"}',
           ),
+        ),
+        const SizedBox(height: 16),
+        ExpansionTile(
+          initiallyExpanded: false,
+          leading: const Icon(Icons.developer_mode_outlined),
+          title: const Text('Developer'),
+          subtitle: const Text('Diagnostics and in-process mock radio'),
+          children: [
+            SwitchListTile(
+              title: const Text('Mock demo peer'),
+              subtitle: const Text(
+                'Off by default. Adds an in-process peer for UI demos '
+                'without real radios (BLE/NFC/Wi‑Fi).',
+              ),
+              value: mesh.useMockDemo,
+              onChanged: (v) => mesh.setUseMockDemo(v),
+            ),
+          ],
         ),
       ],
     );

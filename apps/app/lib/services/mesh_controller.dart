@@ -50,7 +50,9 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
 
   bool ready = false;
   bool running = false;
-  bool useMockDemo = true;
+
+  /// In-process mock radio + demo peer. Off by default; enable in Settings → Developer.
+  bool useMockDemo = false;
   TransportPowerMode powerMode = TransportPowerMode.balanced;
   String? status;
   String? selectedPeerId;
@@ -323,8 +325,39 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  void setUseMockDemo(bool value) {
+  /// Enable/disable the in-process mock radio and demo peer (developer only).
+  Future<void> setUseMockDemo(bool value) async {
+    if (useMockDemo == value) return;
     useMockDemo = value;
+    final mgr = transportManager;
+    final mock = mockTransport;
+    if (mgr != null && mock != null) {
+      final already = mgr.transports.contains(mock);
+      if (value && !already) {
+        await mgr.register(mock);
+        if (running) {
+          await mock.startAdvertising(
+            localId: identity?.id ?? mock.localId,
+            displayName: identity?.displayName ?? mock.displayName,
+          );
+          await demoPeer?.startAdvertising(
+            localId: 'demo-peer-01',
+            displayName: 'Demo Peer',
+            metadata: const {'demo': 'true'},
+          );
+          await mock.startDiscovery();
+        }
+        chat.addSystem('Mock demo peer enabled');
+      } else if (!value && already) {
+        await demoPeer?.stopAdvertising();
+        await mock.stopDiscovery();
+        await mock.stopAdvertising();
+        await mgr.unregister(mock);
+        peers.removeWhere((id, _) => id == 'demo-peer-01');
+        chat.addSystem('Mock demo peer disabled');
+      }
+    }
+    status = useMockDemo ? 'Mock demo on' : 'Mock demo off';
     notifyListeners();
   }
 
