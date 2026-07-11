@@ -334,6 +334,7 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
     if (mgr != null && mock != null) {
       final already = mgr.transports.contains(mock);
       if (value && !already) {
+        // register() starts discovery on the transport if the mesh is already scanning.
         await mgr.register(mock);
         if (running) {
           await mock.startAdvertising(
@@ -345,12 +346,10 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
             displayName: 'Demo Peer',
             metadata: const {'demo': 'true'},
           );
-          await mock.startDiscovery();
         }
         chat.addSystem('Mock demo peer enabled');
       } else if (!value && already) {
         await demoPeer?.stopAdvertising();
-        await mock.stopDiscovery();
         await mock.stopAdvertising();
         await mgr.unregister(mock);
         peers.removeWhere((id, _) => id == 'demo-peer-01');
