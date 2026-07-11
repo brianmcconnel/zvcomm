@@ -67,11 +67,15 @@ dart test packages/zvcomm_core
 dart run apps/zvcomm_cli/bin/zvcomm_cli.dart sim --topology line --nodes 20 --range 40
 dart run apps/zvcomm_cli/bin/zvcomm_cli.dart sim --topology grid --rows 5 --cols 5
 
-# Generate a demo identity
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart identity --name Alice
+# Generate an Ed25519/X25519 identity
+dart run apps/zvcomm_cli/bin/zvcomm_cli.dart identity --name Alice --seed alice
 
-# Issue a placeholder mesh certificate
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart ca-issue --name Alice
+# CA + enroll
+dart run apps/zvcomm_cli/bin/zvcomm_cli.dart ca-init --out ca.json
+dart run apps/zvcomm_cli/bin/zvcomm_cli.dart enroll --seed phone --name Phone --ca ca.json --out-cert cert.json
+
+# Secure session demo
+dart run apps/zvcomm_cli/bin/zvcomm_cli.dart noise-demo
 
 # Run the Flutter app (mock discovery demo)
 cd apps/zvcomm_app && flutter run -d linux   # or chrome, windows, macos, …
