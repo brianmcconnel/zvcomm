@@ -36,6 +36,7 @@ class _HomeShellState extends State<HomeShell> {
           mesh.selectPeer(peerId);
           setState(() => _index = 1);
         },
+        onOpenSettings: () => setState(() => _index = 4),
       ),
       ChatScreen(mesh: mesh),
       CredentialsScreen(mesh: mesh),

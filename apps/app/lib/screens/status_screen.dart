@@ -20,10 +20,14 @@ class StatusScreen extends StatelessWidget {
         TransportStatusBar(
           available: mesh.available,
           powerMode: mesh.powerMode,
+          showMock: mesh.useMockDemo,
         ),
         const SizedBox(height: 8),
         Text(
-          mesh.status ?? (mesh.running ? 'Running' : 'Stopped'),
+          mesh.status ??
+              (mesh.running
+                  ? 'Foreground · ${mesh.powerMode.name}'
+                  : 'Stopped'),
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 16),

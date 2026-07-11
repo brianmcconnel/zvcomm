@@ -17,6 +17,9 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final plugins = mesh.plugins;
+    final id = mesh.identity;
+    final scheme = Theme.of(context).colorScheme;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -25,8 +28,63 @@ class SettingsScreen extends StatelessWidget {
           builder: (context, _) => ThemePicker(controller: themeController),
         ),
         const SizedBox(height: 24),
-        Text('Discovery', style: Theme.of(context).textTheme.titleMedium),
+        Text('This device', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  id?.displayName.isNotEmpty == true
+                      ? id!.displayName
+                      : 'This device',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                SelectableText(
+                  id?.id ?? '—',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontFamily: 'monospace',
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Links',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                const SizedBox(height: 6),
+                TransportLinkIcons(
+                  available: mesh.available,
+                  showMock: mesh.useMockDemo,
+                  showLabels: true,
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(
+                    mesh.running ? Icons.sensors : Icons.sensors_off,
+                    color: mesh.running ? scheme.primary : scheme.outline,
+                  ),
+                  title: Text(
+                      mesh.running ? 'Discovery active' : 'Discovery stopped'),
+                  subtitle: Text(
+                    mesh.status ??
+                        (mesh.running
+                            ? 'Foreground · ${mesh.powerMode.name}'
+                            : 'Start discovery to scan for peers'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         SwitchListTile(
+          contentPadding: EdgeInsets.zero,
           title: const Text('Mesh discovery'),
           subtitle: Text(mesh.running ? 'Active' : 'Stopped'),
           value: mesh.running,
@@ -39,26 +97,39 @@ class SettingsScreen extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Enable or disable backends at runtime (Phase 5). Stubs stay off until '
+          'Enable or disable backends at runtime. Stubs stay off until '
           'real hardware plugins replace them.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 8),
         for (final p in plugins)
           SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: Icon(
+              TransportLinkIcons.iconFor(p.kind),
+              color: (mesh.available[p.kind] ?? false)
+                  ? scheme.primary
+                  : scheme.outline,
+            ),
             title: Text(p.name),
             subtitle: Text(
-              '${p.id} · ${p.kind.name}'
-              '${p.description.isNotEmpty ? "\n${p.description}" : ""}',
+              '${p.kind.name}'
+              '${p.description.isNotEmpty ? " · ${p.description}" : ""}',
             ),
-            isThreeLine: p.description.isNotEmpty,
             value: mesh.pluginEnabled[p.id] ?? p.enabledByDefault,
             onChanged: (v) => mesh.setPluginEnabled(p.id, v),
           ),
         const SizedBox(height: 8),
         Text('Power mode', style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          'Controls scan duty cycle and battery use. Backgrounding the app '
+          'forces power-saver until you return to the foreground.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 4),
         for (final mode in TransportPowerMode.values)
           ListTile(
+            contentPadding: EdgeInsets.zero,
             title: Text(mode.name),
             leading: Icon(
               mesh.powerMode == mode
@@ -71,6 +142,7 @@ class SettingsScreen extends StatelessWidget {
         const SizedBox(height: 16),
         Text('About', style: Theme.of(context).textTheme.titleMedium),
         const ListTile(
+          contentPadding: EdgeInsets.zero,
           title: ZvcommTitle(
             'ZVComm',
             style: TextStyle(
@@ -85,24 +157,23 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
         ListTile(
-          title: const Text('Local ID'),
-          subtitle: SelectableText(mesh.identity?.id ?? '—'),
-        ),
-        ListTile(
+          contentPadding: EdgeInsets.zero,
           title: const Text('Active transports'),
           subtitle: Text(
             '${mesh.transportManager?.transports.length ?? 0} · '
             '${mesh.transportManager?.transports.map((t) => t.name).join(", ") ?? "—"}',
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         ExpansionTile(
           initiallyExpanded: false,
+          tilePadding: EdgeInsets.zero,
           leading: const Icon(Icons.developer_mode_outlined),
           title: const Text('Developer'),
           subtitle: const Text('Diagnostics and in-process mock radio'),
           children: [
             SwitchListTile(
+              contentPadding: EdgeInsets.zero,
               title: const Text('Mock demo peer'),
               subtitle: const Text(
                 'Off by default. Adds an in-process peer for UI demos '
