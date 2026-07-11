@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import '../models/message.dart';
 
-/// Wire-level mesh frame for flooding / routing (Phase 0 skeleton).
+/// Wire-level mesh frame for flooding / adaptive routing.
 ///
 /// Binary layout (version 1, little-endian where applicable):
 /// ```
@@ -11,8 +11,11 @@ import '../models/message.dart';
 /// seq:u32 | msgIdLen:u8 | msgId | srcLen:u8 | src | dstLen:u8 | dst
 /// payloadLen:u16 | payload
 /// ```
+///
+/// Flag bits: `0x01` = prefers adaptive unicast when possible (advisory).
 final class MeshPacket {
   static const int version = 1;
+  static const int flagAdaptive = 0x01;
 
   final String messageId;
   final String sourceId;

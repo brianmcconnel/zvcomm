@@ -82,6 +82,51 @@ void main() {
     });
   });
 
+  group('HybridPacketDeduper + Bloom', () {
+    test('exact window catches recent duplicates', () {
+      final d = HybridPacketDeduper(exactCapacity: 4, bloomBits: 1024);
+      expect(d.observe('a'), isTrue);
+      expect(d.observe('a'), isFalse);
+    });
+
+    test('aged keys are remembered via bloom', () {
+      final d = HybridPacketDeduper(exactCapacity: 2, bloomBits: 4096);
+      expect(d.observe('k0'), isTrue);
+      expect(d.observe('k1'), isTrue);
+      expect(d.observe('k2'), isTrue); // evicts k0 into bloom
+      expect(d.observe('k0'), isFalse); // bloom hit
+    });
+  });
+
+  group('RouteTable', () {
+    test('prefers shorter paths', () {
+      final t = RouteTable();
+      t.learn(destinationId: 'z', nextHopId: 'a', hopCount: 3);
+      t.learn(destinationId: 'z', nextHopId: 'b', hopCount: 2);
+      expect(t.lookup('z')!.nextHopId, 'b');
+      expect(t.lookup('z')!.hopCount, 2);
+    });
+  });
+
+  group('Presence', () {
+    test('codec round-trip and table seq', () {
+      final bytes = PresenceCodec.encode(
+        peerId: 'p1',
+        displayName: 'Pat',
+        sequence: 3,
+      );
+      final info = PresenceCodec.decode(bytes)!;
+      expect(info.peerId, 'p1');
+      expect(info.sequence, 3);
+      final table = PresenceTable();
+      expect(table.observe(info), isTrue);
+      expect(
+        table.observe(info.copyWith(sequence: 2)),
+        isFalse,
+      );
+    });
+  });
+
   group('MockTransport + MeshNode', () {
     late MockMedium medium;
     late MockTransport tA;
@@ -165,7 +210,7 @@ void main() {
     });
 
     test('floods multi-hop when all nodes are linked via discovery', () async {
-      // Place all in range of each other for Phase 0 full mesh flood.
+      // Place all in range of each other for full mesh flood.
       tA.position = const SimPoint(0, 0);
       tB.position = const SimPoint(5, 0);
       tC.position = const SimPoint(10, 0);
@@ -190,6 +235,63 @@ void main() {
       await nodeA.sendChat('multi-hop hi'); // broadcast
       final msg = await received;
       expect(msg.sourceId, 'a');
+    });
+
+    test('line multi-hop reaches non-adjacent node', () async {
+      // A -- B -- C  (range only covers neighbors)
+      tA.position = const SimPoint(0, 0);
+      tB.position = const SimPoint(20, 0);
+      tC.position = const SimPoint(40, 0);
+      tA.rangeMeters = 25;
+      tB.rangeMeters = 25;
+      tC.rangeMeters = 25;
+
+      await nodeA.start();
+      await nodeB.start();
+      await nodeC.start();
+
+      await nodeA.peerUpdates
+          .firstWhere((p) => p.id == 'b')
+          .timeout(const Duration(seconds: 3));
+      await nodeC.peerUpdates
+          .firstWhere((p) => p.id == 'b')
+          .timeout(const Duration(seconds: 3));
+
+      final received = nodeC.messages
+          .firstWhere((m) => utf8.decode(m.payload) == 'relay please')
+          .timeout(const Duration(seconds: 4));
+
+      await nodeA.sendChat('relay please');
+      final msg = await received;
+      expect(msg.sourceId, 'a');
+      expect(nodeB.stats.forwarded, greaterThan(0));
+    });
+
+    test('unicast uses route toward destination', () async {
+      tA.position = const SimPoint(0, 0);
+      tB.position = const SimPoint(10, 0);
+      tC.position = const SimPoint(20, 0);
+      tA.rangeMeters = 50;
+      tB.rangeMeters = 50;
+      tC.rangeMeters = 50;
+
+      await nodeA.start();
+      await nodeB.start();
+      await nodeC.start();
+
+      await nodeA.peerUpdates
+          .firstWhere((p) => p.id == 'c')
+          .timeout(const Duration(seconds: 3));
+
+      // Seed route A→C via B so adaptive path prefers B (optional).
+      nodeA.routes.learn(destinationId: 'c', nextHopId: 'b', hopCount: 2);
+
+      final received = nodeC.messages
+          .firstWhere((m) => utf8.decode(m.payload) == 'direct-ish')
+          .timeout(const Duration(seconds: 3));
+
+      await nodeA.sendChat('direct-ish', to: 'c');
+      expect(utf8.decode((await received).payload), 'direct-ish');
     });
   });
 

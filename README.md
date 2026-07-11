@@ -9,7 +9,7 @@ Bluetooth LE · NFC · Wi-Fi P2P · pluggable transports · offline-first · per
 | **License** | Apache-2.0 |
 | **Stack** | Flutter + Dart (AOT) |
 | **Platforms** | Android, iOS, Linux, macOS, Windows |
-| **Status** | Phase 1 – Transports |
+| **Status** | Phase 2 – Mesh + Simulator |
 
 ## Architecture
 
@@ -63,8 +63,9 @@ dart pub get
 # Core unit tests
 dart test packages/zvcomm_core
 
-# Simulator CLI (line topology)
-dart run apps/zvcomm_cli/bin/zvcomm_cli.dart sim --nodes 5 --range 40
+# Simulator CLI
+dart run apps/zvcomm_cli/bin/zvcomm_cli.dart sim --topology line --nodes 20 --range 40
+dart run apps/zvcomm_cli/bin/zvcomm_cli.dart sim --topology grid --rows 5 --cols 5
 
 # Generate a demo identity
 dart run apps/zvcomm_cli/bin/zvcomm_cli.dart identity --name Alice
@@ -107,6 +108,18 @@ melos run license:check
 - [x] Length-prefixed frame codec for MTU-limited links
 
 See [docs/architecture/phase1-transports.md](docs/architecture/phase1-transports.md).
+
+## Phase 2 deliverables
+
+- [x] Hybrid bloom + LRU packet dedup
+- [x] Adaptive unicast routing with route table + flood fallback
+- [x] Presence heartbeats and live peer table
+- [x] MeshConfig / MeshStats
+- [x] Simulator: line/grid/random/bridge, loss, mobility, metrics
+- [x] Multi-hop and scale tests (40-node line)
+- [x] CLI topologies (`--topology line|grid|random|bridge`)
+
+See [docs/architecture/phase2-mesh.md](docs/architecture/phase2-mesh.md).
 
 ## Development phases
 

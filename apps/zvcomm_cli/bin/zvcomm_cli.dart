@@ -25,9 +25,21 @@ Future<void> main(List<String> arguments) async {
     ..addCommand(
       'sim',
       ArgParser()
-        ..addOption('nodes', defaultsTo: '5', help: 'Node count for line topology')
+        ..addOption(
+          'topology',
+          defaultsTo: 'line',
+          allowed: ['line', 'grid', 'random', 'bridge'],
+          help: 'Topology: line|grid|random|bridge',
+        )
+        ..addOption('nodes', defaultsTo: '5', help: 'Node count (line/random)')
+        ..addOption('rows', defaultsTo: '4', help: 'Grid rows')
+        ..addOption('cols', defaultsTo: '4', help: 'Grid cols')
         ..addOption('spacing', defaultsTo: '20', help: 'Node spacing')
-        ..addOption('range', defaultsTo: '40', help: 'Radio range meters'),
+        ..addOption('range', defaultsTo: '40', help: 'Radio range meters')
+        ..addOption('loss', defaultsTo: '0', help: 'Packet loss 0..1')
+        ..addFlag('mobility', defaultsTo: false, help: 'Enable random-walk mobility')
+        ..addFlag('presence', defaultsTo: false, help: 'Collect presence events')
+        ..addOption('broadcasts', defaultsTo: '1', help: 'Number of broadcasts'),
     )
     ..addCommand('version', ArgParser());
 
@@ -48,7 +60,7 @@ Future<void> main(List<String> arguments) async {
 
   switch (results.command!.name) {
     case 'version':
-      stdout.writeln('zvcomm_cli 0.1.0 (Phase 0)');
+      stdout.writeln('zvcomm_cli 0.2.0 (Phase 2)');
     case 'identity':
       _cmdIdentity(results.command!);
     case 'ca-issue':
@@ -69,9 +81,9 @@ Usage:
   dart run zvcomm_cli <command> [options]
 
 Commands:
-  identity   Generate a device identity (Phase 0 placeholder keys)
+  identity   Generate a device identity (placeholder keys)
   ca-issue   Issue a placeholder mesh certificate from a local CA
-  sim        Run a line-topology mesh simulation
+  sim        Run mesh simulation (line|grid|random|bridge)
   version    Print version
 
 ${parser.usage}
@@ -107,22 +119,61 @@ void _cmdCaIssue(ArgResults cmd) {
 }
 
 Future<void> _cmdSim(ArgResults cmd) async {
+  final topology = cmd['topology'] as String;
   final nodes = int.parse(cmd['nodes'] as String);
   final spacing = double.parse(cmd['spacing'] as String);
   final range = double.parse(cmd['range'] as String);
-  final scenario = SimScenario.line(
-    count: nodes,
-    spacing: spacing,
-    rangeMeters: range,
+  final loss = double.parse(cmd['loss'] as String);
+  final mobility = cmd['mobility'] as bool;
+  final presence = cmd['presence'] as bool;
+  final broadcasts = int.parse(cmd['broadcasts'] as String);
+
+  final SimScenario scenario;
+  switch (topology) {
+    case 'grid':
+      scenario = SimScenario.grid(
+        rows: int.parse(cmd['rows'] as String),
+        cols: int.parse(cmd['cols'] as String),
+        spacing: spacing,
+        rangeMeters: range,
+        packetLoss: loss,
+      );
+    case 'random':
+      scenario = SimScenario.random(
+        count: nodes,
+        rangeMeters: range,
+        packetLoss: loss,
+        mobility: mobility,
+      );
+    case 'bridge':
+      scenario = SimScenario.bridge(
+        perCluster: (nodes / 2).floor().clamp(2, 50),
+        spacing: spacing,
+        rangeMeters: range,
+      );
+    case 'line':
+    default:
+      scenario = SimScenario.line(
+        count: nodes,
+        spacing: spacing,
+        rangeMeters: range,
+        packetLoss: loss,
+      );
+  }
+
+  final result = await MeshSimulator().run(
+    scenario,
+    options: SimRunOptions(
+      broadcastCount: broadcasts,
+      collectPresence: presence,
+      settleAfterStart: Duration(
+        milliseconds: (500 + scenario.nodes.length * 10).clamp(500, 8000),
+      ),
+      settleAfterSend: Duration(
+        milliseconds: (700 + scenario.nodes.length * 12).clamp(700, 12000),
+      ),
+    ),
   );
-  final result = await MeshSimulator().run(scenario);
   stdout.writeln(result);
-  stdout.writeln(const JsonEncoder.withIndent('  ').convert({
-    'scenario': result.scenarioName,
-    'nodeCount': result.nodeCount,
-    'messagesSent': result.messagesSent,
-    'messagesDelivered': result.messagesDelivered,
-    'wallMs': result.wallTime.inMilliseconds,
-    'deliveriesByNode': result.deliveriesByNode,
-  }));
+  stdout.writeln(const JsonEncoder.withIndent('  ').convert(result.toJson()));
 }

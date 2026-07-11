@@ -8,12 +8,24 @@ import 'connection.dart';
 import 'transport.dart';
 
 /// Shared in-process "radio medium" so multiple [MockTransport] instances can
-/// discover and message each other (tests + simulator skeleton).
+/// discover and message each other (tests + simulator).
 final class MockMedium {
   final List<MockTransport> _nodes = [];
   final Random _random;
 
-  MockMedium({Random? random}) : _random = random ?? Random(42);
+  /// Independent packet loss probability in \[0, 1\] applied per send.
+  double packetLoss;
+
+  /// Optional latency added before deliver (wall-clock; keep small in tests).
+  Duration linkDelay;
+
+  MockMedium({
+    Random? random,
+    this.packetLoss = 0,
+    this.linkDelay = Duration.zero,
+  }) : _random = random ?? Random(42);
+
+  Random get random => _random;
 
   void register(MockTransport transport) {
     if (!_nodes.contains(transport)) {
@@ -49,6 +61,22 @@ final class MockMedium {
     final maxRange = min(a.rangeMeters, b.rangeMeters);
     return dist <= maxRange;
   }
+
+  /// Deliver [data] to [to] subject to loss / delay models.
+  void deliver(InMemoryConnection to, Uint8List data) {
+    if (packetLoss > 0 && _random.nextDouble() < packetLoss) {
+      return;
+    }
+    if (linkDelay <= Duration.zero) {
+      to.deliver(data);
+      return;
+    }
+    Future<void>.delayed(linkDelay, () {
+      if (to.state == ConnectionState.open) {
+        to.deliver(data);
+      }
+    });
+  }
 }
 
 /// 2D position for simple range simulation.
@@ -79,7 +107,7 @@ final class MockTransport implements Transport {
   final MockMedium medium;
   final String localId;
   final String displayName;
-  final double rangeMeters;
+  double rangeMeters;
   SimPoint? position;
 
   bool _advertising = false;
@@ -237,8 +265,10 @@ final class MockTransport implements Transport {
       ),
     );
 
-    localConn.onSend = (data) => remoteConn.deliver(Uint8List.fromList(data));
-    remoteConn.onSend = (data) => localConn.deliver(Uint8List.fromList(data));
+    localConn.onSend =
+        (data) => medium.deliver(remoteConn, Uint8List.fromList(data));
+    remoteConn.onSend =
+        (data) => medium.deliver(localConn, Uint8List.fromList(data));
 
     localConn.markOpen();
     remoteConn.markOpen();

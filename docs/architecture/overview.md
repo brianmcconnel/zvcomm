@@ -37,16 +37,15 @@ All radios implement `Transport` in `zvcomm_core`:
 
 `MockTransport` + `MockMedium` share production mesh code with the simulator.
 
-## Mesh (Phase 0)
+## Mesh (Phase 2)
 
-Managed flooding:
-
-- Sequence + message id dedup (`PacketDeduper`)
-- TTL / hop limit
-- Broadcast or unicast destination
+- Hybrid bloom + LRU dedup
+- Adaptive unicast (route table) with managed flood fallback
+- Presence heartbeats + TTL
+- `MeshConfig` / `MeshStats`
 - Binary `MeshPacket` v1 framing
 
-Phase 2 adds bloom filters, adaptive routing, and richer topology.
+See [phase2-mesh.md](phase2-mesh.md).
 
 ## Security (Phase 0 placeholder)
 
