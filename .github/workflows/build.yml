@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   FLUTTER_CHANNEL: stable
@@ -29,7 +29,7 @@ jobs:
       version: ${{ steps.ver.outputs.version }}
       retention: ${{ steps.ver.outputs.retention }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: ver
         run: |
           VER=$(grep -E '^version:' apps/app/pubspec.yaml | head -1 | awk '{print $2}' | tr -d '"'"'" | tr '+' '-')
@@ -49,7 +49,7 @@ jobs:
     needs: meta
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: subosito/flutter-action@v2
         with:
@@ -79,7 +79,7 @@ jobs:
           tar -czf "dist/${OUT}.tar.gz" -C dist "$OUT"
           ls -lh "dist/${OUT}.tar.gz"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: zvcomm-linux-x64
           path: dist/*.tar.gz
@@ -93,7 +93,7 @@ jobs:
     needs: meta
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: subosito/flutter-action@v2
         with:
@@ -128,7 +128,7 @@ jobs:
           (cd dist && 7z a -tzip "${OUT}.zip" "$OUT")
           ls -lh "dist/${OUT}.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: zvcomm-windows-x64
           path: dist/*.zip
@@ -142,7 +142,7 @@ jobs:
     needs: meta
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: subosito/flutter-action@v2
         with:
@@ -172,7 +172,7 @@ jobs:
           (cd dist && ditto -c -k --sequesterRsrc --keepParent "$OUT" "${OUT}.zip")
           ls -lh "dist/${OUT}.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: zvcomm-macos
           path: dist/*.zip
@@ -186,7 +186,7 @@ jobs:
     needs: meta
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: subosito/flutter-action@v2
         with:
@@ -216,7 +216,7 @@ jobs:
           tar -czf "../../../dist/${OUT}.tar.gz" web
           ls -lh "../../../dist/${OUT}.tar.gz"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: zvcomm-web
           path: dist/*.tar.gz
@@ -230,9 +230,9 @@ jobs:
     needs: meta
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -275,7 +275,7 @@ jobs:
           ls -lh dist/
           test -n "$(ls -A dist)"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: zvcomm-android
           path: dist/*
@@ -289,7 +289,7 @@ jobs:
     needs: meta
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: subosito/flutter-action@v2
         with:
@@ -321,7 +321,7 @@ jobs:
           (cd dist && ditto -c -k --sequesterRsrc --keepParent "$OUT" "${OUT}.zip")
           ls -lh "dist/${OUT}.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: zvcomm-ios-unsigned
           path: dist/*.zip
@@ -349,7 +349,7 @@ jobs:
             out: zvcomm-cli
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Workspace root resolves apps/app (Flutter). Plain dart-lang/setup-dart fails.
       - uses: subosito/flutter-action@v2
@@ -368,7 +368,7 @@ jobs:
           dart compile exe apps/cli/bin/cli.dart -o "dist/${{ matrix.out }}"
           ls -lh dist/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: zvcomm-cli-${{ matrix.artifact }}
           path: dist/${{ matrix.out }}
@@ -393,7 +393,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           path: artifacts
           merge-multiple: false

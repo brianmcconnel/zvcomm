@@ -14,6 +14,8 @@
 - Tags matching `v*` (also creates a GitHub Release)
 - Manual: **Actions → Build → Run workflow**
 
+**Concurrency:** in-progress runs are only cancelled for **pull requests**. Pushes to `main` / tags finish even if a newer run is queued (avoids mid-job cancels on multi-platform builds).
+
 ## Artifacts
 
 Download from the Actions run page (**Artifacts** section):
