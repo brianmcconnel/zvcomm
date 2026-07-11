@@ -541,4 +541,113 @@ void main() {
       await other.dispose();
     });
   });
+
+  group('MessageCensor', () {
+    tearDown(MessageCensor.resetDefaults);
+
+    test('masks known English profanity', () {
+      MessageCensor.pattern = LanguagePattern.english;
+      final out = MessageCensor.censor('what the shit is this');
+      expect(out, isNot(contains('shit')));
+      expect(out, contains('*'));
+      expect(MessageCensor.hasProfanity('what the shit is this'), isTrue);
+      expect(MessageCensor.hasProfanity('hello world'), isFalse);
+    });
+
+    test('can be disabled', () {
+      MessageCensor.enabled = false;
+      expect(MessageCensor.censor('shit'), 'shit');
+    });
+
+    test('sendChat censors before mesh delivery', () async {
+      MessageCensor.pattern = LanguagePattern.english;
+      final medium = MockMedium();
+      final tA = MockTransport(
+        medium: medium,
+        localId: 'a',
+        displayName: 'A',
+        position: const SimPoint(0, 0),
+      );
+      final tB = MockTransport(
+        medium: medium,
+        localId: 'b',
+        displayName: 'B',
+        position: const SimPoint(5, 0),
+      );
+      final nodeA = MeshNode(
+        localId: 'a',
+        transports: TransportManager([tA]),
+        config: const MeshConfig(presenceInterval: Duration.zero),
+      );
+      final nodeB = MeshNode(
+        localId: 'b',
+        transports: TransportManager([tB]),
+        config: const MeshConfig(presenceInterval: Duration.zero),
+      );
+      await nodeA.start();
+      await nodeB.start();
+      await nodeA.peerUpdates
+          .firstWhere((p) => p.id == 'b')
+          .timeout(const Duration(seconds: 3));
+
+      final got = nodeB.messages.first.timeout(const Duration(seconds: 3));
+      await nodeA.sendChat('hello shit friend', to: 'b');
+      final msg = await got;
+      final text = utf8.decode(msg.payload);
+      expect(text, isNot(contains('shit')));
+      expect(text, contains('hello'));
+      expect(text, contains('friend'));
+
+      await nodeA.dispose();
+      await nodeB.dispose();
+    });
+
+    test('censors after secure session decrypt', () async {
+      MessageCensor.pattern = LanguagePattern.english;
+      final alice = await DeviceIdentity.fromSeed(
+        'alice-censor-seed',
+        displayName: 'Alice',
+      );
+      final bob = await DeviceIdentity.fromSeed(
+        'bob-censor-seed',
+        displayName: 'Bob',
+      );
+
+      final hs = Handshake(alice);
+      final msg1 = await hs.createInitiation();
+      final bobHs = Handshake(bob);
+      final msg2 = await bobHs.acceptInitiation(msg1);
+      final aliceSession = await hs.finish(msg2.response);
+      final bobSession = msg2.session;
+
+      // Seal raw profanity (simulates peer without outbound filter), then
+      // post-decrypt censor as SecureMesh does.
+      final dirty = 'oh shit';
+      final sealed = await aliceSession.seal(
+        Uint8List.fromList(utf8.encode(dirty)),
+      );
+      final clear = await bobSession.open(sealed);
+      final after = MessageCensor.censor(utf8.decode(clear));
+      expect(after, isNot(contains('shit')));
+      expect(after.length, dirty.length);
+    });
+
+    test('ChatLog censors local and remote lines', () {
+      MessageCensor.pattern = LanguagePattern.english;
+      final log = ChatLog();
+      log.addLocalChat(text: 'damn shit', to: 'p', messageId: '1');
+      expect(log.thread('p').single.text, isNot(contains('shit')));
+
+      log.addRemoteChat(
+        MeshMessage(
+          id: '2',
+          sourceId: 'p',
+          kind: MessageKind.chat,
+          payload: Uint8List.fromList(utf8.encode('more shit here')),
+          timestamp: DateTime.now().toUtc(),
+        ),
+      );
+      expect(log.thread('p').last.text, isNot(contains('shit')));
+    });
+  });
 }

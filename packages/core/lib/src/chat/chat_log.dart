@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../models/message.dart';
+import 'message_censor.dart';
 
 /// UI-facing chat line (local or remote).
 final class ChatLine {
@@ -52,7 +53,7 @@ final class ChatLog {
       ChatLine(
         id: messageId,
         peerId: to,
-        text: text,
+        text: MessageCensor.censor(text),
         timestamp: DateTime.now().toUtc(),
         isLocal: true,
         isBroadcast: to == null || to.isEmpty,
@@ -64,7 +65,7 @@ final class ChatLog {
     if (msg.kind != MessageKind.chat) return;
     String text;
     try {
-      text = utf8.decode(msg.payload);
+      text = MessageCensor.censor(utf8.decode(msg.payload));
     } catch (_) {
       text = '[binary ${msg.payload.length} B]';
     }
@@ -101,5 +102,6 @@ final class ChatLog {
   }
 }
 
-/// Encode plain chat text payload.
-Uint8List encodeChatText(String text) => Uint8List.fromList(utf8.encode(text));
+/// Encode plain chat text payload (censored).
+Uint8List encodeChatText(String text) =>
+    Uint8List.fromList(utf8.encode(MessageCensor.censor(text)));

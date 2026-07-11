@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import '../chat/message_censor.dart';
 import '../models/message.dart';
 import '../models/peer.dart';
 import '../transport/connection.dart';
@@ -166,8 +167,12 @@ final class MeshNode {
   }
 
   /// Send a chat/text message (broadcast if [to] is null).
+  ///
+  /// Plaintext is run through [MessageCensor] before encoding (and thus before
+  /// any later encryption layer).
   Future<void> sendChat(String text, {String? to}) async {
-    final payload = Uint8List.fromList(utf8.encode(text));
+    final cleaned = MessageCensor.censor(text);
+    final payload = Uint8List.fromList(utf8.encode(cleaned));
     await send(
       MeshMessage(
         id: _newId(),

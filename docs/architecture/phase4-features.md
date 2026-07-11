@@ -5,6 +5,7 @@
 | Feature | Implementation |
 |---------|----------------|
 | Chat | Broadcast + per-peer threads (`ChatLog`, `ChatScreen`) |
+| Profanity filter | [`censor_it`](https://pub.dev/packages/censor_it) (MIT) via `MessageCensor` — applied before encrypt / after decrypt |
 | File transfer | Chunked `MessageKind.data` frames (`FileTransferService`) |
 | Presence / status | Live presence list + `MeshStatsView` |
 | Power / battery | Lifecycle observer → background presence + powerSaver |

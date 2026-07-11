@@ -32,5 +32,6 @@ export 'src/crypto/enrollment.dart';
 export 'src/mesh/secure_mesh.dart';
 export 'src/transfer/file_transfer.dart';
 export 'src/chat/chat_log.dart';
+export 'src/chat/message_censor.dart';
 export 'src/protocol/uuids.dart';
 export 'src/protocol/frame_codec.dart';

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../chat/message_censor.dart';
 import '../crypto/identity.dart';
 import '../crypto/secure_session.dart';
 import '../models/message.dart';
@@ -62,23 +63,26 @@ final class SecureMesh {
   }
 
   /// Send encrypted chat when a session exists; otherwise plain (or handshake first).
+  ///
+  /// Censors [text] **before encryption** so ciphertext never carries raw profanity.
   Future<void> sendSecureChat(
     String text, {
     required String to,
     bool requireSession = true,
   }) async {
+    final cleaned = MessageCensor.censor(text);
     if (!sessions.hasSession(to)) {
       if (requireSession) {
         await establishSession(to);
         // Caller may retry after handshake completes asynchronously.
         throw StateError('handshake started with $to; retry after established');
       }
-      await node.sendChat(text, to: to);
+      await node.sendChat(cleaned, to: to);
       return;
     }
     final cipher = await sessions.encryptTo(
       to,
-      Uint8List.fromList(utf8.encode(text)),
+      Uint8List.fromList(utf8.encode(cleaned)),
     );
     final payload = cipher;
     await node.send(
@@ -124,9 +128,14 @@ final class SecureMesh {
         msg.payload[0] == SecureWire.appData) {
       try {
         final clear = await sessions.decryptFrom(from, msg.payload);
+        // Censor **after decryption** before app/UI sees plaintext.
+        final cleaned = MessageCensor.censor(utf8.decode(clear));
         if (!_plaintext.isClosed) {
           _plaintext.add(
-            msg.copyWith(payload: clear, headers: {...msg.headers, 'enc': '0'}),
+            msg.copyWith(
+              payload: Uint8List.fromList(utf8.encode(cleaned)),
+              headers: {...msg.headers, 'enc': '0'},
+            ),
           );
         }
         return;
@@ -136,7 +145,22 @@ final class SecureMesh {
     }
 
     if (!_plaintext.isClosed) {
-      _plaintext.add(msg);
+      _plaintext.add(_censorChatMessage(msg));
+    }
+  }
+
+  /// Censor chat payloads on plaintext (or failed-decrypt) paths.
+  MeshMessage _censorChatMessage(MeshMessage msg) {
+    if (msg.kind != MessageKind.chat || msg.payload.isEmpty) return msg;
+    // Skip binary-looking frames (e.g. still-encrypted app-data that failed open).
+    if (msg.payload[0] == SecureWire.appData) return msg;
+    try {
+      final text = utf8.decode(msg.payload);
+      final cleaned = MessageCensor.censor(text);
+      if (identical(cleaned, text) || cleaned == text) return msg;
+      return msg.copyWith(payload: Uint8List.fromList(utf8.encode(cleaned)));
+    } catch (_) {
+      return msg;
     }
   }
 
