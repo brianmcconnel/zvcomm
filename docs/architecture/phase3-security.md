@@ -37,6 +37,25 @@ Noise-inspired XX-style (not byte-compatible with Noise Protocol Framework):
 - `LocalCa`: issue, verify, revoke
 - `EnrollmentRequest` / `EnrollmentResponse` for NFC/QR/BLE bootstrap
 - `SignedRevocationList` for CRL-style gossip (`MessageKind.pki`)
+- **Organizations**: trust a CA root (`zvcomm:org:v1:…`) to accept **external**
+  devices that hold org-issued certificates — without pairwise credential exchange
+
+### Organization trust
+
+| Concept | Role |
+|---------|------|
+| `Organization` | Trusted CA root (public keys + name) |
+| `TrustStore` | Orgs + direct peers + org-issued external certs |
+| Direct trust | QR / NFC / short-code `PublicCredential` |
+| External trust | `MeshCertificate` where `issuerId` is a trusted org |
+
+```bash
+# Export org root from a CA identity
+dart run apps/cli/bin/cli.dart org --export-ca ca.json --name "Acme Corp"
+
+# Validate org payload + external cert
+dart run apps/cli/bin/cli.dart org --trust 'zvcomm:org:v1:…' --verify-cert cert.json
+```
 
 ## Identity storage
 

@@ -17,8 +17,14 @@ class _CredentialsScreenState extends State<CredentialsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   final _importCtrl = TextEditingController();
+  final _orgCtrl = TextEditingController();
+  final _certCtrl = TextEditingController();
   String? _importError;
   String? _importOk;
+  String? _orgError;
+  String? _orgOk;
+  String? _certError;
+  String? _certOk;
   bool _busy = false;
 
   MeshController get mesh => widget.mesh;
@@ -26,13 +32,15 @@ class _CredentialsScreenState extends State<CredentialsScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 3, vsync: this);
   }
 
   @override
   void dispose() {
     _tabs.dispose();
     _importCtrl.dispose();
+    _orgCtrl.dispose();
+    _certCtrl.dispose();
     super.dispose();
   }
 
@@ -135,6 +143,53 @@ class _CredentialsScreenState extends State<CredentialsScreen>
     }
   }
 
+  Future<void> _trustOrg() async {
+    setState(() {
+      _busy = true;
+      _orgError = null;
+      _orgOk = null;
+    });
+    try {
+      final org = await mesh.trustOrganization(_orgCtrl.text);
+      if (mounted) {
+        setState(() {
+          _orgOk = 'Trusted org ${org.name} (${org.shortCode})';
+          _orgCtrl.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _orgError = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _trustCert() async {
+    setState(() {
+      _busy = true;
+      _certError = null;
+      _certOk = null;
+    });
+    try {
+      final d = await mesh.trustExternalCertificateJson(_certCtrl.text);
+      if (mounted) {
+        if (d.isTrusted) {
+          setState(() {
+            _certOk =
+                'External ${d.subjectId} via ${d.organizationName ?? "org"}';
+            _certCtrl.clear();
+          });
+        } else {
+          setState(() => _certError = d.detail ?? 'Rejected');
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _certError = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -144,6 +199,7 @@ class _CredentialsScreenState extends State<CredentialsScreen>
           tabs: const [
             Tab(text: 'Share'),
             Tab(text: 'Import'),
+            Tab(text: 'Orgs'),
           ],
         ),
         Expanded(
@@ -152,6 +208,7 @@ class _CredentialsScreenState extends State<CredentialsScreen>
             children: [
               _buildShare(),
               _buildImport(),
+              _buildOrgs(),
             ],
           ),
         ),
@@ -354,7 +411,142 @@ class _CredentialsScreenState extends State<CredentialsScreen>
             ListTile(
               leading: const Icon(Icons.verified_user),
               title: Text(c.displayName.isEmpty ? c.subjectId : c.displayName),
-              subtitle: Text('${c.shortCode} · ${c.subjectId}'),
+              subtitle: Text('${c.shortCode} · ${c.subjectId} · direct'),
+            ),
+        // Org-issued externals
+        ...mesh.trustStore.externalCerts.entries.map((e) {
+          final cert = e.value;
+          final orgId = mesh.trustStore.externalOrgBySubject[e.key];
+          final org =
+              orgId != null ? mesh.trustStore.organizations[orgId] : null;
+          return ListTile(
+            leading: const Icon(Icons.apartment),
+            title: Text(cert.subjectId),
+            subtitle: Text(
+              'via ${org?.name ?? cert.issuerId} · serial ${cert.serial}',
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildOrgs() {
+    final orgs = mesh.trustStore.organizationList;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          'Organizations',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Trust an organization CA to accept certificates it issues for '
+          'external devices — without exchanging keys with each person.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _orgCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Organization payload',
+            hintText: 'zvcomm:org:v1:…  or  org JSON  or  CA cred URI',
+            border: OutlineInputBorder(),
+          ),
+          minLines: 2,
+          maxLines: 5,
+        ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: _busy ? null : _trustOrg,
+          icon: const Icon(Icons.domain_add),
+          label: const Text('Trust organization'),
+        ),
+        if (_orgError != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _orgError!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+        if (_orgOk != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _orgOk!,
+            style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          ),
+        ],
+        const SizedBox(height: 24),
+        Text(
+          'Import external certificate',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Paste a MeshCertificate JSON issued by a trusted org.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _certCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Certificate JSON',
+            hintText: '{ "subjectId": …, "issuerId": … }',
+            border: OutlineInputBorder(),
+          ),
+          minLines: 3,
+          maxLines: 8,
+        ),
+        const SizedBox(height: 8),
+        FilledButton.tonalIcon(
+          onPressed: _busy ? null : _trustCert,
+          icon: const Icon(Icons.badge_outlined),
+          label: const Text('Trust external cert'),
+        ),
+        if (_certError != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _certError!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+        if (_certOk != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _certOk!,
+            style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          ),
+        ],
+        const SizedBox(height: 24),
+        Text(
+          'Trusted orgs (${orgs.length})',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        if (orgs.isEmpty)
+          const ListTile(
+            dense: true,
+            title: Text('No organizations yet'),
+            subtitle: Text('Import an org QR / CA root to trust externals'),
+          )
+        else
+          for (final o in orgs)
+            ListTile(
+              leading: const Icon(Icons.business),
+              title: Text(o.name),
+              subtitle: Text(
+                '${o.shortCode} · ${o.id}\n'
+                '${o.description ?? "Allows: ${o.allowCapabilities.join(", ")}"}',
+              ),
+              isThreeLine: true,
+              trailing: IconButton(
+                tooltip: 'Remove',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () {
+                  mesh.untrustOrganization(o.id);
+                  setState(() {});
+                },
+              ),
             ),
       ],
     );

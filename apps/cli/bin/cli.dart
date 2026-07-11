@@ -7,7 +7,6 @@ import 'package:args/args.dart';
 import 'package:core/core.dart';
 import 'package:pki/pki.dart';
 import 'package:sim/sim.dart';
-
 Future<void> main(List<String> arguments) async {
   final parser = ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage')
@@ -120,6 +119,28 @@ Future<void> main(List<String> arguments) async {
         )
         ..addOption('out', help: 'Write QR payload to file'),
     )
+    ..addCommand(
+      'org',
+      ArgParser()
+        ..addOption(
+          'export-ca',
+          help: 'CA identity JSON path → print org QR payload',
+        )
+        ..addOption('name', help: 'Override organization display name')
+        ..addOption(
+          'description',
+          help: 'Optional org description when exporting',
+        )
+        ..addOption(
+          'trust',
+          help: 'Org payload (zvcomm:org:v1:… / JSON) to validate parse',
+        )
+        ..addOption(
+          'verify-cert',
+          help: 'MeshCertificate JSON to verify under --trust org',
+        )
+        ..addOption('out', help: 'Write org QR payload to file'),
+    )
     ..addCommand('version', ArgParser());
 
   ArgResults results;
@@ -158,6 +179,8 @@ Future<void> main(List<String> arguments) async {
       await _cmdMeshNode(results.command!);
     case 'cred':
       await _cmdCred(results.command!);
+    case 'org':
+      await _cmdOrg(results.command!);
     default:
       _usage(parser);
       exitCode = 64;
@@ -178,6 +201,7 @@ Commands:
   hub         TCP radio hub for multi-process / Docker sims
   mesh-node   Join hub as a MeshNode client
   cred        Export/import QR + short-code public credentials
+  org         Export/trust organization CA roots for external members
   version
 
 ${parser.usage}
@@ -563,4 +587,74 @@ Future<void> _cmdCred(ArgResults cmd) async {
     'shortCode': cred.shortCode,
     'qrPayload': payload,
   }));
+}
+
+Future<void> _cmdOrg(ArgResults cmd) async {
+  final exportCa = cmd['export-ca'] as String?;
+  final trustPayload = cmd['trust'] as String?;
+  final verifyCert = cmd['verify-cert'] as String?;
+
+  if (exportCa != null) {
+    final root = await _loadIdentity(exportCa);
+    var org = Organization.fromCaRoot(
+      root,
+      description: cmd['description'] as String?,
+    );
+    final name = cmd['name'] as String?;
+    if (name != null && name.isNotEmpty) {
+      org = Organization(
+        id: org.id,
+        name: name,
+        ed25519PublicKey: org.ed25519PublicKey,
+        x25519PublicKey: org.x25519PublicKey,
+        description: org.description,
+        trustedAt: org.trustedAt,
+        allowCapabilities: org.allowCapabilities,
+      );
+    }
+    final payload = org.toQrPayload();
+    final out = cmd['out'] as String?;
+    if (out != null) await File(out).writeAsString(payload);
+    stdout.writeln(const JsonEncoder.withIndent('  ').convert({
+      'id': org.id,
+      'name': org.name,
+      'shortCode': org.shortCode,
+      'qrPayload': payload,
+    }));
+    return;
+  }
+
+  if (trustPayload != null) {
+    final org = Organization.parse(trustPayload);
+    final store = TrustStore()..trustOrganization(org);
+    if (verifyCert != null) {
+      final cert = MeshCertificate.fromJson(
+        Map<String, Object?>.from(jsonDecode(verifyCert) as Map),
+      );
+      final decision = await store.trustExternalCertificate(cert);
+      stdout.writeln(const JsonEncoder.withIndent('  ').convert({
+        'organization': {
+          'id': org.id,
+          'name': org.name,
+          'shortCode': org.shortCode
+        },
+        'decision': decision.toJson(),
+      }));
+      if (!decision.isTrusted) exitCode = 1;
+      return;
+    }
+    stdout.writeln(const JsonEncoder.withIndent('  ').convert({
+      'ok': true,
+      'id': org.id,
+      'name': org.name,
+      'shortCode': org.shortCode,
+      'description': org.description,
+    }));
+    return;
+  }
+
+  stderr.writeln(
+    'Usage: org --export-ca ca.json  |  org --trust <payload> [--verify-cert cert.json]',
+  );
+  exitCode = 64;
 }

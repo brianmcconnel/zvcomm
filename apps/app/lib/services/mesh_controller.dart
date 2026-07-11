@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:ble/ble.dart';
 import 'package:core/core.dart';
 import 'package:nfc/nfc.dart';
+import 'package:pki/pki.dart';
 import 'package:wifi/wifi.dart';
 
 /// App-wide mesh lifecycle, chat log, transfers, plugins, and battery policy.
@@ -34,6 +35,9 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Credentials imported via QR / short code / mesh offer.
   final Map<String, PublicCredential> trustedCredentials = {};
+
+  /// Organization roots + org-issued external certificates.
+  final TrustStore trustStore = TrustStore();
 
   /// Transient mesh offers keyed by short code.
   final CredentialOfferCache offerCache = CredentialOfferCache();
@@ -415,6 +419,7 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     trustedCredentials[cred.subjectId] = cred;
+    trustStore.trustDirect(cred);
     offerCache.put(cred);
     chat.addSystem(
       'Trusted credential: ${cred.displayName.isEmpty ? cred.subjectId : cred.displayName}'
@@ -424,6 +429,60 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
     return cred;
   }
+
+  /// Trust an organization CA so its issued certificates are accepted as externals.
+  Future<Organization> trustOrganization(String raw) async {
+    final org = Organization.parse(raw);
+    trustStore.trustOrganization(org);
+    // Also keep a synthetic direct credential for QR re-export of the org root.
+    chat.addSystem(
+      'Trusted organization: ${org.name} · ${org.shortCode}'
+      '${org.description != null ? " — ${org.description}" : ""}',
+    );
+    status = 'Org ${org.name} trusted';
+    notifyListeners();
+    return org;
+  }
+
+  void untrustOrganization(String orgId) {
+    final org = trustStore.organizations[orgId];
+    trustStore.untrustOrganization(orgId);
+    if (org != null) {
+      chat.addSystem('Removed organization trust: ${org.name}');
+    }
+    notifyListeners();
+  }
+
+  /// Import an org-issued [MeshCertificate] for an external device.
+  Future<TrustDecision> trustExternalCertificateJson(String raw) async {
+    final text = raw.trim();
+    if (!text.startsWith('{')) {
+      throw const FormatException('certificate JSON required');
+    }
+    final decoded =
+        Map<String, Object?>.from(jsonDecode(text) as Map<dynamic, dynamic>);
+    final cert = MeshCertificate.fromJson(decoded);
+    final decision = await trustStore.trustExternalCertificate(cert);
+    if (decision.isTrusted) {
+      chat.addSystem(
+        'Trusted external ${cert.subjectId} via org '
+        '${decision.organizationName ?? cert.issuerId}',
+      );
+      status = 'External ${cert.subjectId.substring(0, 8)}… trusted';
+    } else {
+      status = decision.detail ?? 'External cert rejected';
+    }
+    notifyListeners();
+    return decision;
+  }
+
+  /// Whether [subjectId] is trusted directly or via an organization.
+  bool isTrusted(String subjectId) =>
+      trustStore.isTrustedSubject(subjectId) ||
+      trustedCredentials.containsKey(subjectId);
+
+  Future<TrustDecision> evaluateTrust(String subjectId) =>
+      trustStore.evaluate(subjectId: subjectId);
 
   /// Broadcast local public credential so peers can import via short code.
   Future<void> publishCredentialOffer({String? to}) async {

@@ -62,4 +62,47 @@ void main() {
     expect(await crl.verify(ca.root), isTrue);
     expect(crl.list.isRevoked(device.id), isTrue);
   });
+
+  test('organization trust accepts org-issued external certs', () async {
+    final ca = await LocalCa.generate(displayName: 'Acme Corp');
+    final org = Organization.fromCaRoot(ca.root, description: 'Acme mesh CA');
+    expect(org.shortCode, matches(RegExp(r'^[0-9A-Z]{4}-[0-9A-Z]{4}$')));
+
+    final payload = org.toQrPayload();
+    expect(payload, startsWith('zvcomm:org:v1:'));
+    final restored = Organization.parse(payload);
+    expect(restored.id, org.id);
+    expect(restored.name, 'Acme Corp');
+
+    final store = TrustStore()..trustOrganization(org);
+
+    final external =
+        await DeviceIdentity.fromSeed('contractor', displayName: 'Ext');
+    final cert = await ca.issueFor(external);
+
+    // Unknown issuer → not trusted.
+    final empty = TrustStore();
+    final denied = await empty.trustExternalCertificate(cert);
+    expect(denied.isTrusted, isFalse);
+
+    // Trusted org → external accepted.
+    final decision = await store.trustExternalCertificate(cert);
+    expect(decision.isTrusted, isTrue);
+    expect(decision.basis, TrustBasis.organization);
+    expect(decision.organizationName, 'Acme Corp');
+    expect(store.isTrustedSubject(external.id), isTrue);
+
+    final eval = await store.evaluate(subjectId: external.id);
+    expect(eval.basis, TrustBasis.organization);
+  });
+
+  test('direct peer trust still works alongside orgs', () async {
+    final store = TrustStore();
+    final alice =
+        await DeviceIdentity.fromSeed('alice-org', displayName: 'Alice');
+    final cred = await PublicCredential.fromIdentity(alice);
+    store.trustDirect(cred);
+    final d = await store.evaluate(credential: cred);
+    expect(d.basis, TrustBasis.direct);
+  });
 }

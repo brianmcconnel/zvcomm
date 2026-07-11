@@ -24,6 +24,8 @@ dependencies:
     path: ../../packages/wifi
   ui:
     path: ../../packages/ui
+  pki:
+    path: ../../packages/pki
 
 dev_dependencies:
   flutter_test:
