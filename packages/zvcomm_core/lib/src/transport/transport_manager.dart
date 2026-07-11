@@ -6,21 +6,31 @@ import 'connection.dart';
 import 'transport.dart';
 
 /// Aggregates multiple [Transport] backends into one discovery / connect API.
+///
+/// Supports Phase 5 hot-plug via [register] / [unregister].
 final class TransportManager {
-  final List<Transport> _transports;
+  final List<Transport> _transports = [];
   final Map<String, Peer> _peers = {};
   final StreamController<Peer> _peerUpdates =
       StreamController<Peer>.broadcast();
   final StreamController<Connection> _incomingConnections =
       StreamController<Connection>.broadcast();
-  final List<StreamSubscription<dynamic>> _subs = [];
+
+  /// Per-transport discovery + inbound subscriptions for hot-unplug.
+  final Map<Transport, List<StreamSubscription<dynamic>>> _transportSubs = {};
+
+  String? _localId;
+  String? _displayName;
+  Map<String, String> _metadata = const {};
+  bool _advertising = false;
   bool _discovering = false;
-  bool _listeningInbound = false;
+  TransportPowerMode _powerMode = TransportPowerMode.balanced;
 
-  TransportManager(Iterable<Transport> transports)
-      : _transports = List.unmodifiable(transports);
+  TransportManager([Iterable<Transport> transports = const []]) {
+    _transports.addAll(transports);
+  }
 
-  List<Transport> get transports => _transports;
+  List<Transport> get transports => List.unmodifiable(_transports);
 
   /// Snapshot of last-seen peers (by id).
   Map<String, Peer> get peers => Map.unmodifiable(_peers);
@@ -31,6 +41,8 @@ final class TransportManager {
   /// Inbound connections from any backend.
   Stream<Connection> get incomingConnections => _incomingConnections.stream;
 
+  bool get isDiscovering => _discovering;
+
   Transport? transportOf(TransportKind kind) {
     for (final t in _transports) {
       if (t.kind == kind) return t;
@@ -38,12 +50,97 @@ final class TransportManager {
     return null;
   }
 
+  Transport? transportWhere(bool Function(Transport t) test) {
+    for (final t in _transports) {
+      if (test(t)) return t;
+    }
+    return null;
+  }
+
+  /// Hot-add a transport. If discovery/advertising is active, wires it up.
+  Future<void> register(Transport transport) async {
+    if (_transports.contains(transport)) return;
+    _transports.add(transport);
+    await transport.setPowerMode(_powerMode);
+
+    _wireInbound(transport);
+
+    if (_advertising && _localId != null) {
+      if (transport.capabilities.canAdvertise &&
+          await transport.isAvailable()) {
+        await transport.startAdvertising(
+          localId: _localId!,
+          displayName: _displayName,
+          metadata: _metadata,
+        );
+      }
+    }
+
+    if (_discovering) {
+      await _startDiscoveryOn(transport);
+    }
+  }
+
+  /// Remove and dispose a transport instance.
+  Future<void> unregister(Transport transport) async {
+    if (!_transports.remove(transport)) return;
+    await _teardownTransport(transport);
+    await transport.dispose();
+  }
+
+  /// Unregister the first transport matching [kind].
+  Future<bool> unregisterKind(TransportKind kind) async {
+    final t = transportOf(kind);
+    if (t == null) return false;
+    await unregister(t);
+    return true;
+  }
+
+  Future<void> _teardownTransport(Transport transport) async {
+    _inboundWired.remove(transport);
+    final subs = _transportSubs.remove(transport) ?? const [];
+    for (final s in subs) {
+      await s.cancel();
+    }
+    try {
+      await transport.stopDiscovery();
+    } catch (_) {}
+    try {
+      await transport.stopAdvertising();
+    } catch (_) {}
+  }
+
+  final Set<Transport> _inboundWired = {};
+
+  void _wireInbound(Transport t) {
+    if (_inboundWired.contains(t)) return;
+    _inboundWired.add(t);
+    final list = _transportSubs.putIfAbsent(t, () => []);
+    final sub = t.incomingConnections.listen((conn) {
+      if (!_incomingConnections.isClosed) {
+        _incomingConnections.add(conn);
+      }
+    });
+    list.add(sub);
+  }
+
+  /// Subscribe to inbound connections on all transports (idempotent).
+  void listenForInboundConnections() {
+    for (final t in _transports) {
+      _wireInbound(t);
+    }
+  }
+
   Future<void> startAdvertising({
     required String localId,
     String? displayName,
     Map<String, String> metadata = const {},
   }) async {
-    for (final t in _transports) {
+    _localId = localId;
+    _displayName = displayName;
+    _metadata = metadata;
+    _advertising = true;
+    for (final t in List<Transport>.from(_transports)) {
       if (!t.capabilities.canAdvertise) continue;
       if (!await t.isAvailable()) continue;
       await t.startAdvertising(
@@ -55,22 +152,9 @@ final class TransportManager {
   }
 
   Future<void> stopAdvertising() async {
-    for (final t in _transports) {
+    _advertising = false;
+    for (final t in List<Transport>.from(_transports)) {
       await t.stopAdvertising();
-    }
-  }
-
-  /// Subscribe to inbound connections on all transports (safe to call once).
-  void listenForInboundConnections() {
-    if (_listeningInbound) return;
-    _listeningInbound = true;
-    for (final t in _transports) {
-      final sub = t.incomingConnections.listen((conn) {
-        if (!_incomingConnections.isClosed) {
-          _incomingConnections.add(conn);
-        }
-      });
-      _subs.add(sub);
     }
   }
 
@@ -80,12 +164,17 @@ final class TransportManager {
     _discovering = true;
     listenForInboundConnections();
 
-    for (final t in _transports) {
-      final available = await t.isAvailable();
-      if (!available || !t.capabilities.canDiscover) continue;
-      final sub = t.discover().listen(_onPeer);
-      _subs.add(sub);
+    for (final t in List<Transport>.from(_transports)) {
+      await _startDiscoveryOn(t);
     }
+  }
+
+  Future<void> _startDiscoveryOn(Transport t) async {
+    final available = await t.isAvailable();
+    if (!available || !t.capabilities.canDiscover) return;
+    final list = _transportSubs.putIfAbsent(t, () => []);
+    final sub = t.discover().listen(_onPeer);
+    list.add(sub);
   }
 
   void _onPeer(Peer peer) {
@@ -111,15 +200,20 @@ final class TransportManager {
 
   Future<void> stopDiscovery() async {
     _discovering = false;
-    // Cancel transport scans/timers before awaiting subscription cleanup.
-    for (final t in _transports) {
+    for (final t in List<Transport>.from(_transports)) {
       await t.stopDiscovery();
     }
-    for (final s in _subs) {
-      await s.cancel();
+    for (final entry in _transportSubs.entries) {
+      // Keep inbound subs; only cancel discovery by full cancel+rewire inbound
+      for (final s in entry.value) {
+        await s.cancel();
+      }
+      entry.value.clear();
     }
-    _subs.clear();
-    _listeningInbound = false;
+    // Re-wire inbound only so connections still work while not discovering.
+    for (final t in _transports) {
+      _wireInbound(t);
+    }
   }
 
   /// Connect using preferred transport, with optional [preferred] override.
@@ -153,7 +247,8 @@ final class TransportManager {
   }
 
   Future<void> setPowerMode(TransportPowerMode mode) async {
-    for (final t in _transports) {
+    _powerMode = mode;
+    for (final t in List<Transport>.from(_transports)) {
       await t.setPowerMode(mode);
     }
   }
@@ -161,9 +256,14 @@ final class TransportManager {
   Future<void> dispose() async {
     await stopDiscovery();
     await stopAdvertising();
-    for (final t in _transports) {
+    for (final t in List<Transport>.from(_transports)) {
+      final subs = _transportSubs.remove(t) ?? const [];
+      for (final s in subs) {
+        await s.cancel();
+      }
       await t.dispose();
     }
+    _transports.clear();
     await _peerUpdates.close();
     await _incomingConnections.close();
     _peers.clear();

@@ -346,6 +346,91 @@ void main() {
     });
   });
 
+  group('TransportRegistry + plugins', () {
+    late TransportRegistry registry;
+
+    setUp(() {
+      registry = TransportRegistry.instance;
+      registry.clear();
+      BuiltinCorePlugins.registerAll(registry);
+    });
+
+    tearDown(() {
+      registry.clear();
+    });
+
+    test('registers stub plugins sorted by priority', () {
+      final ids = registry.plugins.map((p) => p.id).toList();
+      expect(ids, contains('builtin.uwb.stub'));
+      expect(ids, contains('builtin.lora.stub'));
+      // UWB priority 80 > hardware 30
+      final uwb = registry.plugins.indexWhere((p) => p.id == 'builtin.uwb.stub');
+      final hw = registry.plugins.indexWhere(
+        (p) => p.id == BuiltinCorePlugins.hardwareAdapterId,
+      );
+      expect(uwb, lessThan(hw));
+    });
+
+    test('hot-plug transport on TransportManager', () async {
+      final mgr = TransportManager([]);
+      final medium = MockMedium();
+      final t = MockTransport(medium: medium, localId: 'x', displayName: 'X');
+      await mgr.register(t);
+      expect(mgr.transports, hasLength(1));
+      await mgr.unregister(t);
+      expect(mgr.transports, isEmpty);
+    });
+
+    test('hardware adapter loopback carries framed mesh payload', () async {
+      final pair = LoopbackHardwarePair();
+      await pair.a.open();
+      await pair.b.open();
+
+      final tA = AdapterTransport(
+        adapter: pair.a,
+        remotePeerId: 'b',
+        remoteDisplayName: 'B',
+      );
+      final tB = AdapterTransport(
+        adapter: pair.b,
+        remotePeerId: 'a',
+        remoteDisplayName: 'A',
+      );
+
+      final nodeA = MeshNode(
+        localId: 'a',
+        transports: TransportManager([tA]),
+        config: const MeshConfig(presenceInterval: Duration.zero),
+      );
+      final nodeB = MeshNode(
+        localId: 'b',
+        transports: TransportManager([tB]),
+        config: const MeshConfig(presenceInterval: Duration.zero),
+      );
+
+      await nodeA.start();
+      await nodeB.start();
+
+      // Synthetic discovery peers for adapter transports.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      // Manually ensure peer addresses for connect.
+      // Adapter discover emits hw peer ids 'b' and 'a'.
+      await nodeA.peerUpdates
+          .firstWhere((p) => p.id == 'b')
+          .timeout(const Duration(seconds: 3));
+
+      final got = nodeB.messages.first.timeout(const Duration(seconds: 3));
+      await nodeA.sendChat('via-hardware', to: 'b');
+      final msg = await got;
+      expect(utf8.decode(msg.payload), 'via-hardware');
+
+      tA.cancelDiscoverySync();
+      tB.cancelDiscoverySync();
+      await nodeA.dispose();
+      await nodeB.dispose();
+    });
+  });
+
   group('FileTransferService', () {
     test('sends and reassembles file over mock mesh', () async {
       final medium = MockMedium();

@@ -2,7 +2,7 @@ name: zvcomm_app
 description: >
   ZVComm – ultra-efficient short-range mesh chat, files, and presence over
   BLE, NFC, and Wi-Fi. Offline-first, Apache-2.0.
-version: 0.4.0+4
+version: 0.5.0+5
 publish_to: none
 
 environment:

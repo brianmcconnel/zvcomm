@@ -55,3 +55,16 @@ See [phase2-mesh.md](phase2-mesh.md).
 - `IdentityStore` (memory / file); mobile keystore later
 
 See [phase3-security.md](phase3-security.md).
+
+## Extensibility (Phase 5)
+
+- Plugin registry for transports
+- Hot enable/disable backends
+- Hardware adapter byte-pipe → mesh transport
+- Stubs for UWB / LoRa
+
+See [phase5-extensibility.md](phase5-extensibility.md).
+
+## Features (Phase 4)
+
+Chat, file transfer, status UI, packaging — see [phase4-features.md](phase4-features.md).

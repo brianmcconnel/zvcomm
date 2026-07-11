@@ -8,24 +8,29 @@ import 'package:zvcomm_core/zvcomm_core.dart';
 import 'package:zvcomm_nfc/zvcomm_nfc.dart';
 import 'package:zvcomm_wifi/zvcomm_wifi.dart';
 
-/// App-wide mesh lifecycle, chat log, transfers, and battery power policy.
+/// App-wide mesh lifecycle, chat log, transfers, plugins, and battery policy.
 final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
   DeviceIdentity? identity;
   MeshNode? node;
   FileTransferService? transfers;
   final ChatLog chat = ChatLog();
+  final TransportRegistry registry = TransportRegistry.instance;
 
-  late final BleTransport ble;
-  late final NfcTransport nfc;
-  late final WifiTransport wifi;
   late final MockMedium medium;
   MockTransport? mockTransport;
   MockTransport? demoPeer;
+  TransportManager? transportManager;
 
   final Map<String, Peer> peers = {};
   final Map<TransportKind, bool> available = {};
   final List<FileTransferProgress> transferHistory = [];
   final List<PresenceInfo> livePresence = [];
+
+  /// Plugin id → enabled for the next stack rebuild / current session.
+  final Map<String, bool> pluginEnabled = {};
+
+  /// Live transports created from plugins (for hot enable/disable).
+  final Map<String, Transport> pluginTransports = {};
 
   StreamSubscription<Peer>? _peerSub;
   StreamSubscription<MeshMessage>? _msgSub;
@@ -42,9 +47,7 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
   String displayName = 'This device';
 
   Future<void> bootstrap() async {
-    ble = BleTransport();
-    nfc = NfcTransport();
-    wifi = WifiTransport();
+    _registerPlugins();
     medium = MockMedium();
 
     final id = await DeviceIdentity.generate(displayName: displayName);
@@ -63,15 +66,39 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
       position: const SimPoint(8, 0),
     );
 
+    final ctx = TransportPluginContext(
+      localId: id.id,
+      displayName: id.displayName,
+    );
+
+    final stack = <Transport>[];
+    pluginTransports.clear();
+    for (final plugin in registry.plugins) {
+      final on = pluginEnabled[plugin.id] ?? plugin.enabledByDefault;
+      pluginEnabled[plugin.id] = on;
+      if (!on) continue;
+      if (plugin.id == BuiltinCorePlugins.mockId ||
+          plugin.id == BuiltinCorePlugins.hardwareAdapterId) {
+        continue;
+      }
+      try {
+        final t = plugin.create(ctx);
+        stack.add(t);
+        pluginTransports[plugin.id] = t;
+      } catch (e) {
+        chat.addSystem('Plugin ${plugin.id} failed: $e');
+      }
+    }
+    // Always include local mock radio for demo/LAN-less UX when enabled.
+    if (useMockDemo) {
+      stack.add(mockTransport!);
+    }
+
+    transportManager = TransportManager(stack);
     node = MeshNode(
       localId: id.id,
       displayName: id.displayName,
-      transports: TransportManager([
-        ble,
-        nfc,
-        wifi,
-        mockTransport!,
-      ]),
+      transports: transportManager!,
     );
     transfers = FileTransferService(node: node!)..start();
 
@@ -119,6 +146,68 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  void _registerPlugins() {
+    // Idempotent re-register of known plugins.
+    BuiltinCorePlugins.registerAll(registry);
+    registerBlePlugin(registry);
+    registerNfcPlugin(registry);
+    registerWifiPlugin(registry);
+  }
+
+  List<TransportPlugin> get plugins => registry.plugins;
+
+  Future<void> setPluginEnabled(String pluginId, bool enabled) async {
+    pluginEnabled[pluginId] = enabled;
+    final mgr = transportManager;
+    final id = identity;
+    if (mgr == null || id == null) {
+      notifyListeners();
+      return;
+    }
+
+    final plugin = registry[pluginId];
+    if (plugin == null) {
+      notifyListeners();
+      return;
+    }
+
+    // Options-only plugins are configured programmatically, not toggled here.
+    if (pluginId == BuiltinCorePlugins.mockId ||
+        pluginId == BuiltinCorePlugins.hardwareAdapterId) {
+      notifyListeners();
+      return;
+    }
+
+    final existing = pluginTransports[pluginId];
+
+    if (enabled) {
+      if (existing != null) {
+        notifyListeners();
+        return;
+      }
+      try {
+        final t = plugin.create(
+          TransportPluginContext(
+            localId: id.id,
+            displayName: id.displayName,
+          ),
+        );
+        await mgr.register(t);
+        pluginTransports[pluginId] = t;
+        chat.addSystem('Enabled transport plugin ${plugin.name}');
+      } catch (e) {
+        chat.addSystem('Failed to enable ${plugin.name}: $e');
+      }
+    } else if (existing != null) {
+      await mgr.unregister(existing);
+      pluginTransports.remove(pluginId);
+      chat.addSystem('Disabled transport plugin ${plugin.name}');
+    }
+
+    await probeAvailability();
+    notifyListeners();
+  }
+
   Future<void> probeAvailability() async {
     Future<bool> safe(Future<bool> Function() check) async {
       try {
@@ -128,11 +217,14 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    available
-      ..[TransportKind.ble] = await safe(ble.isAvailable)
-      ..[TransportKind.nfc] = await safe(nfc.isAvailable)
-      ..[TransportKind.wifi] = await safe(wifi.isAvailable)
-      ..[TransportKind.mock] = true;
+    available.clear();
+    final mgr = transportManager;
+    if (mgr != null) {
+      for (final t in mgr.transports) {
+        available[t.kind] = await safe(t.isAvailable);
+      }
+    }
+    available[TransportKind.mock] = useMockDemo;
     notifyListeners();
   }
 
@@ -158,9 +250,8 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
           .join(', ');
       status =
           'Scanning: ${active.isEmpty ? "none" : active}${useMockDemo ? " + mock" : ""}';
-      chat.addSystem('Mesh started');
+      chat.addSystem('Mesh started (${transportManager?.transports.length ?? 0} transports)');
     } catch (e) {
-      // Still mark ready UI; mock/LAN may work even if a radio start timed out.
       running = true;
       status = 'Mesh started (some transports unavailable)';
       chat.addSystem('Mesh start partial: $e');
@@ -270,7 +361,9 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     mockTransport?.cancelDiscoverySync();
     demoPeer?.cancelDiscoverySync();
-    wifi.cancelTimersSync();
+    for (final t in transportManager?.transports ?? const <Transport>[]) {
+      if (t is WifiTransport) t.cancelTimersSync();
+    }
     unawaited(_peerSub?.cancel());
     unawaited(_msgSub?.cancel());
     unawaited(_presenceSub?.cancel());

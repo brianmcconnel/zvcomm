@@ -6,3 +6,5 @@ library;
 
 export 'src/ble_transport.dart';
 export 'src/ble_connection.dart';
+export 'src/ble_plugin.dart';
+

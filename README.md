@@ -9,7 +9,7 @@ Bluetooth LE · NFC · Wi-Fi P2P · pluggable transports · offline-first · per
 | **License** | Apache-2.0 |
 | **Stack** | Flutter + Dart (AOT) |
 | **Platforms** | Android, iOS, Linux, macOS, Windows |
-| **Status** | Phase 4 – Features & Packaging |
+| **Status** | Phase 5 – Extensibility (complete roadmap) |
 
 ## Architecture
 
@@ -149,6 +149,18 @@ See [docs/architecture/phase3-security.md](docs/architecture/phase3-security.md)
 - [x] CI Linux release build
 
 See [docs/architecture/phase4-features.md](docs/architecture/phase4-features.md) and [docs/packaging.md](docs/packaging.md).
+
+## Phase 5 deliverables
+
+- [x] `TransportPlugin` + `TransportRegistry`
+- [x] Hot-plug `TransportManager.register` / `unregister`
+- [x] `HardwareAdapter` + `AdapterTransport` bridge
+- [x] Loopback hardware pair for tests
+- [x] UWB / LoRa stub plugins (disabled by default)
+- [x] BLE / NFC / Wi-Fi self-registration helpers
+- [x] Settings UI to enable/disable plugins at runtime
+
+See [docs/architecture/phase5-extensibility.md](docs/architecture/phase5-extensibility.md).
 
 ## Development phases
 
