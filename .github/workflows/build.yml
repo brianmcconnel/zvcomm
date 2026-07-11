@@ -290,7 +290,7 @@ jobs:
   ios:
     name: iOS (no codesign)
     needs: meta
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
 
@@ -347,7 +347,7 @@ jobs:
           - os: windows-latest
             artifact: windows-x64
             out: zvcomm-cli.exe
-          - os: macos-latest
+          - os: macos-15
             artifact: macos
             out: zvcomm-cli
     runs-on: ${{ matrix.os }}
