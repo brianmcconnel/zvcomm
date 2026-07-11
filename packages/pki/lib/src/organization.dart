@@ -5,6 +5,75 @@ import 'package:core/core.dart';
 
 import 'certificate.dart';
 
+/// Classification for trusted organizations (UI grouping + policy).
+enum OrganizationCategory {
+  government,
+  churches,
+  families,
+  companies,
+  nonProfits,
+  other;
+
+  /// Display label for UI.
+  String get label => switch (this) {
+        OrganizationCategory.government => 'Government',
+        OrganizationCategory.churches => 'Churches',
+        OrganizationCategory.families => 'Families',
+        OrganizationCategory.companies => 'Companies',
+        OrganizationCategory.nonProfits => 'Non-Profits',
+        OrganizationCategory.other => 'Other',
+      };
+
+  /// Stable wire/JSON id.
+  String get id => switch (this) {
+        OrganizationCategory.government => 'government',
+        OrganizationCategory.churches => 'churches',
+        OrganizationCategory.families => 'families',
+        OrganizationCategory.companies => 'companies',
+        OrganizationCategory.nonProfits => 'non_profits',
+        OrganizationCategory.other => 'other',
+      };
+
+  /// All categories in display order.
+  static const List<OrganizationCategory> displayOrder = [
+    OrganizationCategory.government,
+    OrganizationCategory.churches,
+    OrganizationCategory.families,
+    OrganizationCategory.companies,
+    OrganizationCategory.nonProfits,
+    OrganizationCategory.other,
+  ];
+
+  static OrganizationCategory parse(String? raw) {
+    if (raw == null || raw.isEmpty) return OrganizationCategory.other;
+    final s =
+        raw.trim().toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+    return switch (s) {
+      'government' || 'gov' || 'govt' => OrganizationCategory.government,
+      'churches' ||
+      'church' ||
+      'religious' ||
+      'faith' =>
+        OrganizationCategory.churches,
+      'families' || 'family' || 'household' => OrganizationCategory.families,
+      'companies' ||
+      'company' ||
+      'corp' ||
+      'business' ||
+      'enterprise' =>
+        OrganizationCategory.companies,
+      'non_profits' ||
+      'non_profit' ||
+      'nonprofit' ||
+      'nonprofits' ||
+      'ngo' ||
+      'charity' =>
+        OrganizationCategory.nonProfits,
+      _ => OrganizationCategory.other,
+    };
+  }
+}
+
 /// A trusted organization (external trust root).
 ///
 /// When you trust an [Organization], you accept [MeshCertificate]s it issues
@@ -28,6 +97,9 @@ final class Organization {
 
   final String? description;
 
+  /// Category for grouping (Government, Churches, Families, …).
+  final OrganizationCategory category;
+
   /// When this org was added to the local trust store.
   final DateTime trustedAt;
 
@@ -40,16 +112,37 @@ final class Organization {
     required this.ed25519PublicKey,
     this.x25519PublicKey,
     this.description,
+    this.category = OrganizationCategory.other,
     required this.trustedAt,
     this.allowCapabilities = const ['mesh', 'chat'],
   });
 
   String get shortCode => ShortCode.fromSubjectId(id);
 
+  Organization copyWith({
+    String? name,
+    String? description,
+    OrganizationCategory? category,
+    DateTime? trustedAt,
+    List<String>? allowCapabilities,
+  }) {
+    return Organization(
+      id: id,
+      name: name ?? this.name,
+      ed25519PublicKey: ed25519PublicKey,
+      x25519PublicKey: x25519PublicKey,
+      description: description ?? this.description,
+      category: category ?? this.category,
+      trustedAt: trustedAt ?? this.trustedAt,
+      allowCapabilities: allowCapabilities ?? this.allowCapabilities,
+    );
+  }
+
   /// Build from a local CA root (export as public org trust anchor).
   factory Organization.fromCaRoot(
     DeviceIdentity root, {
     String? description,
+    OrganizationCategory category = OrganizationCategory.other,
     List<String> allowCapabilities = const ['mesh', 'chat'],
     DateTime? trustedAt,
   }) {
@@ -59,6 +152,7 @@ final class Organization {
       ed25519PublicKey: root.ed25519PublicKey,
       x25519PublicKey: root.x25519PublicKey,
       description: description,
+      category: category,
       trustedAt: trustedAt ?? DateTime.now().toUtc(),
       allowCapabilities: allowCapabilities,
     );
@@ -68,6 +162,7 @@ final class Organization {
   factory Organization.fromPublicCredential(
     PublicCredential cred, {
     String? description,
+    OrganizationCategory category = OrganizationCategory.other,
     List<String> allowCapabilities = const ['mesh', 'chat'],
     DateTime? trustedAt,
   }) {
@@ -77,6 +172,7 @@ final class Organization {
       ed25519PublicKey: cred.ed25519PublicKey,
       x25519PublicKey: cred.x25519PublicKey,
       description: description,
+      category: category,
       trustedAt: trustedAt ?? DateTime.now().toUtc(),
       allowCapabilities: allowCapabilities,
     );
@@ -87,6 +183,7 @@ final class Organization {
         'kind': 'organization',
         'id': id,
         'name': name,
+        'category': category.id,
         'ed25519PublicKey': base64Url.encode(ed25519PublicKey),
         if (x25519PublicKey != null)
           'x25519PublicKey': base64Url.encode(x25519PublicKey!),
@@ -112,6 +209,9 @@ final class Organization {
       x25519PublicKey:
           x is String ? Uint8List.fromList(base64Url.decode(x)) : null,
       description: json['description'] as String?,
+      category: OrganizationCategory.parse(
+        (json['category'] ?? json['cat']) as String?,
+      ),
       trustedAt: json['trustedAt'] is String
           ? DateTime.parse(json['trustedAt']! as String)
           : DateTime.now().toUtc(),
@@ -156,7 +256,10 @@ final class Organization {
     // Allow treating a public device credential as an org CA root.
     if (input.toLowerCase().startsWith('zvcomm:cred:')) {
       final cred = PublicCredential.parse(input);
-      return Organization.fromPublicCredential(cred);
+      return Organization.fromPublicCredential(
+        cred,
+        category: OrganizationCategory.other,
+      );
     }
     try {
       final decoded = utf8.decode(base64Url.decode(input));
@@ -339,8 +442,38 @@ final class TrustStore {
       externalCerts.containsKey(subjectId) ||
       organizations.containsKey(subjectId);
 
-  List<Organization> get organizationList =>
-      organizations.values.toList(growable: false);
+  List<Organization> get organizationList {
+    final list = organizations.values.toList();
+    list.sort((a, b) {
+      final c = a.category.index.compareTo(b.category.index);
+      if (c != 0) return c;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return list;
+  }
+
+  /// Orgs grouped by [OrganizationCategory] (display order; empty groups omitted
+  /// when [includeEmpty] is false).
+  Map<OrganizationCategory, List<Organization>> organizationsByCategory({
+    bool includeEmpty = false,
+  }) {
+    final map = <OrganizationCategory, List<Organization>>{
+      for (final c in OrganizationCategory.displayOrder) c: <Organization>[],
+    };
+    for (final o in organizationList) {
+      map[o.category]!.add(o);
+    }
+    if (!includeEmpty) {
+      map.removeWhere((_, list) => list.isEmpty);
+    }
+    return map;
+  }
+
+  /// Update category (or other fields) of an already-trusted org.
+  void updateOrganization(Organization org) {
+    if (!organizations.containsKey(org.id)) return;
+    organizations[org.id] = org;
+  }
 
   Map<String, Object?> toJson() => {
         'organizations': organizations.values.map((o) => o.toJson()).toList(),

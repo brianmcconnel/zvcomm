@@ -431,17 +431,30 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Trust an organization CA so its issued certificates are accepted as externals.
-  Future<Organization> trustOrganization(String raw) async {
-    final org = Organization.parse(raw);
+  Future<Organization> trustOrganization(
+    String raw, {
+    OrganizationCategory? category,
+  }) async {
+    var org = Organization.parse(raw);
+    if (category != null && org.category != category) {
+      org = org.copyWith(category: category);
+    }
     trustStore.trustOrganization(org);
-    // Also keep a synthetic direct credential for QR re-export of the org root.
     chat.addSystem(
-      'Trusted organization: ${org.name} · ${org.shortCode}'
+      'Trusted organization: ${org.name} · ${org.category.label} · ${org.shortCode}'
       '${org.description != null ? " — ${org.description}" : ""}',
     );
-    status = 'Org ${org.name} trusted';
+    status = 'Org ${org.name} (${org.category.label}) trusted';
     notifyListeners();
     return org;
+  }
+
+  void setOrganizationCategory(String orgId, OrganizationCategory category) {
+    final existing = trustStore.organizations[orgId];
+    if (existing == null) return;
+    trustStore.updateOrganization(existing.copyWith(category: category));
+    chat.addSystem('${existing.name} → ${category.label}');
+    notifyListeners();
   }
 
   void untrustOrganization(String orgId) {

@@ -44,14 +44,17 @@ Noise-inspired XX-style (not byte-compatible with Noise Protocol Framework):
 
 | Concept | Role |
 |---------|------|
-| `Organization` | Trusted CA root (public keys + name) |
+| `Organization` | Trusted CA root (public keys + name + **category**) |
 | `TrustStore` | Orgs + direct peers + org-issued external certs |
 | Direct trust | QR / NFC / short-code `PublicCredential` |
 | External trust | `MeshCertificate` where `issuerId` is a trusted org |
 
+**Categories** (UI grouping): Government · Churches · Families · Companies · Non-Profits · Other.
+
 ```bash
 # Export org root from a CA identity
-dart run apps/cli/bin/cli.dart org --export-ca ca.json --name "Acme Corp"
+dart run apps/cli/bin/cli.dart org --export-ca ca.json --name "Acme Corp" \
+  --category companies
 
 # Validate org payload + external cert
 dart run apps/cli/bin/cli.dart org --trust 'zvcomm:org:v1:…' --verify-cert cert.json

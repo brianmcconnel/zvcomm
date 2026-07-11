@@ -7,6 +7,7 @@ import 'package:args/args.dart';
 import 'package:core/core.dart';
 import 'package:pki/pki.dart';
 import 'package:sim/sim.dart';
+
 Future<void> main(List<String> arguments) async {
   final parser = ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage')
@@ -130,6 +131,20 @@ Future<void> main(List<String> arguments) async {
         ..addOption(
           'description',
           help: 'Optional org description when exporting',
+        )
+        ..addOption(
+          'category',
+          defaultsTo: 'other',
+          allowed: [
+            'government',
+            'churches',
+            'families',
+            'companies',
+            'non_profits',
+            'other',
+          ],
+          help:
+              'government | churches | families | companies | non_profits | other',
         )
         ..addOption(
           'trust',
@@ -594,23 +609,18 @@ Future<void> _cmdOrg(ArgResults cmd) async {
   final trustPayload = cmd['trust'] as String?;
   final verifyCert = cmd['verify-cert'] as String?;
 
+  final category = OrganizationCategory.parse(cmd['category'] as String?);
+
   if (exportCa != null) {
     final root = await _loadIdentity(exportCa);
     var org = Organization.fromCaRoot(
       root,
       description: cmd['description'] as String?,
+      category: category,
     );
     final name = cmd['name'] as String?;
     if (name != null && name.isNotEmpty) {
-      org = Organization(
-        id: org.id,
-        name: name,
-        ed25519PublicKey: org.ed25519PublicKey,
-        x25519PublicKey: org.x25519PublicKey,
-        description: org.description,
-        trustedAt: org.trustedAt,
-        allowCapabilities: org.allowCapabilities,
-      );
+      org = org.copyWith(name: name);
     }
     final payload = org.toQrPayload();
     final out = cmd['out'] as String?;
@@ -618,6 +628,8 @@ Future<void> _cmdOrg(ArgResults cmd) async {
     stdout.writeln(const JsonEncoder.withIndent('  ').convert({
       'id': org.id,
       'name': org.name,
+      'category': org.category.id,
+      'categoryLabel': org.category.label,
       'shortCode': org.shortCode,
       'qrPayload': payload,
     }));
@@ -625,7 +637,10 @@ Future<void> _cmdOrg(ArgResults cmd) async {
   }
 
   if (trustPayload != null) {
-    final org = Organization.parse(trustPayload);
+    var org = Organization.parse(trustPayload);
+    if (cmd.wasParsed('category')) {
+      org = org.copyWith(category: category);
+    }
     final store = TrustStore()..trustOrganization(org);
     if (verifyCert != null) {
       final cert = MeshCertificate.fromJson(
@@ -636,7 +651,8 @@ Future<void> _cmdOrg(ArgResults cmd) async {
         'organization': {
           'id': org.id,
           'name': org.name,
-          'shortCode': org.shortCode
+          'category': org.category.id,
+          'shortCode': org.shortCode,
         },
         'decision': decision.toJson(),
       }));
@@ -647,6 +663,8 @@ Future<void> _cmdOrg(ArgResults cmd) async {
       'ok': true,
       'id': org.id,
       'name': org.name,
+      'category': org.category.id,
+      'categoryLabel': org.category.label,
       'shortCode': org.shortCode,
       'description': org.description,
     }));

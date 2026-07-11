@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pki/pki.dart';
 import 'package:ui/ui.dart';
 
 import '../services/mesh_controller.dart';
@@ -26,6 +27,7 @@ class _CredentialsScreenState extends State<CredentialsScreen>
   String? _certError;
   String? _certOk;
   bool _busy = false;
+  OrganizationCategory _selectedCategory = OrganizationCategory.other;
 
   MeshController get mesh => widget.mesh;
 
@@ -150,10 +152,14 @@ class _CredentialsScreenState extends State<CredentialsScreen>
       _orgOk = null;
     });
     try {
-      final org = await mesh.trustOrganization(_orgCtrl.text);
+      final org = await mesh.trustOrganization(
+        _orgCtrl.text,
+        category: _selectedCategory,
+      );
       if (mounted) {
         setState(() {
-          _orgOk = 'Trusted org ${org.name} (${org.shortCode})';
+          _orgOk =
+              'Trusted ${org.name} · ${org.category.label} (${org.shortCode})';
           _orgCtrl.clear();
         });
       }
@@ -432,7 +438,9 @@ class _CredentialsScreenState extends State<CredentialsScreen>
   }
 
   Widget _buildOrgs() {
-    final orgs = mesh.trustStore.organizationList;
+    final byCategory =
+        mesh.trustStore.organizationsByCategory(includeEmpty: true);
+    final total = mesh.trustStore.organizations.length;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -443,10 +451,27 @@ class _CredentialsScreenState extends State<CredentialsScreen>
         const SizedBox(height: 4),
         Text(
           'Trust an organization CA to accept certificates it issues for '
-          'external devices — without exchanging keys with each person.',
+          'external devices — without exchanging keys with each person. '
+          'Group by Government, Churches, Families, Companies, Non-Profits, or Other.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
+        DropdownButtonFormField<OrganizationCategory>(
+          // ignore: deprecated_member_use — value is still valid on stable
+          value: _selectedCategory,
+          decoration: const InputDecoration(
+            labelText: 'Category',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            for (final c in OrganizationCategory.displayOrder)
+              DropdownMenuItem(value: c, child: Text(c.label)),
+          ],
+          onChanged: (c) {
+            if (c != null) setState(() => _selectedCategory = c);
+          },
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: _orgCtrl,
           decoration: const InputDecoration(
@@ -520,34 +545,115 @@ class _CredentialsScreenState extends State<CredentialsScreen>
         ],
         const SizedBox(height: 24),
         Text(
-          'Trusted orgs (${orgs.length})',
+          'Trusted orgs ($total)',
           style: Theme.of(context).textTheme.titleSmall,
         ),
-        if (orgs.isEmpty)
+        if (total == 0)
           const ListTile(
             dense: true,
             title: Text('No organizations yet'),
             subtitle: Text('Import an org QR / CA root to trust externals'),
           )
         else
-          for (final o in orgs)
-            ListTile(
-              leading: const Icon(Icons.business),
-              title: Text(o.name),
-              subtitle: Text(
-                '${o.shortCode} · ${o.id}\n'
-                '${o.description ?? "Allows: ${o.allowCapabilities.join(", ")}"}',
-              ),
-              isThreeLine: true,
-              trailing: IconButton(
-                tooltip: 'Remove',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () {
-                  mesh.untrustOrganization(o.id);
-                  setState(() {});
-                },
-              ),
+          for (final cat in OrganizationCategory.displayOrder) ...[
+            const SizedBox(height: 12),
+            _CategoryHeader(
+              category: cat,
+              count: byCategory[cat]?.length ?? 0,
             ),
+            if ((byCategory[cat] ?? const []).isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, bottom: 4),
+                child: Text(
+                  'None',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                ),
+              )
+            else
+              for (final o in byCategory[cat]!)
+                ListTile(
+                  leading: Icon(_iconForCategory(o.category)),
+                  title: Text(o.name),
+                  subtitle: Text(
+                    '${o.shortCode} · ${o.id}\n'
+                    '${o.description ?? "Allows: ${o.allowCapabilities.join(", ")}"}',
+                  ),
+                  isThreeLine: true,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PopupMenuButton<OrganizationCategory>(
+                        tooltip: 'Change category',
+                        icon: const Icon(Icons.drive_file_move_outline),
+                        onSelected: (c) {
+                          mesh.setOrganizationCategory(o.id, c);
+                          setState(() {});
+                        },
+                        itemBuilder: (context) => [
+                          for (final c in OrganizationCategory.displayOrder)
+                            PopupMenuItem(
+                              value: c,
+                              child: Text(
+                                c.label,
+                                style: TextStyle(
+                                  fontWeight: c == o.category
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      IconButton(
+                        tooltip: 'Remove',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () {
+                          mesh.untrustOrganization(o.id);
+                          setState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+          ],
+      ],
+    );
+  }
+
+  static IconData _iconForCategory(OrganizationCategory c) => switch (c) {
+        OrganizationCategory.government => Icons.account_balance,
+        OrganizationCategory.churches => Icons.church,
+        OrganizationCategory.families => Icons.family_restroom,
+        OrganizationCategory.companies => Icons.business,
+        OrganizationCategory.nonProfits => Icons.volunteer_activism,
+        OrganizationCategory.other => Icons.domain,
+      };
+}
+
+class _CategoryHeader extends StatelessWidget {
+  final OrganizationCategory category;
+  final int count;
+
+  const _CategoryHeader({required this.category, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          _CredentialsScreenState._iconForCategory(category),
+          size: 20,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '${category.label} ($count)',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
       ],
     );
   }
