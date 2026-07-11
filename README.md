@@ -63,9 +63,13 @@ dart pub get
 # Core unit tests
 dart test packages/core
 
-# Simulator CLI
+# Simulator CLI (in-process)
 dart run apps/cli/bin/cli.dart sim --topology line --nodes 20 --range 40
 dart run apps/cli/bin/cli.dart sim --topology grid --rows 5 --cols 5
+
+# Four Docker clients + TCP radio hub (line multi-hop)
+./scripts/run-four-client-sim.sh
+# see docker/sim/README.md
 
 # Generate an Ed25519/X25519 identity
 dart run apps/cli/bin/cli.dart identity --name Alice --seed alice

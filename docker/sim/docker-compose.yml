@@ -1,0 +1,146 @@
+# Four ZVComm mesh clients + shared TCP radio hub.
+#
+# Topology (line, multi-hop):
+#   alice (x=0) — bob (x=25) — carol (x=50) — dave (x=75)
+#   radio range = 40 m  → neighbors only; mesh floods end-to-end.
+#
+# Usage (from repo root):
+#   docker compose -f docker/sim/docker-compose.yml up --build
+#   # or: ./scripts/run-four-client-sim.sh
+
+name: zvcomm-sim
+
+services:
+  hub:
+    build:
+      context: ../..
+      dockerfile: docker/sim/Dockerfile
+    command: ["hub", "--host", "0.0.0.0", "--port", "7700"]
+    ports:
+      - "7700:7700"
+    networks:
+      - mesh
+
+  alice:
+    build:
+      context: ../..
+      dockerfile: docker/sim/Dockerfile
+    depends_on:
+      - hub
+    command:
+      - mesh-node
+      - --hub
+      - hub:7700
+      - --id
+      - alice
+      - --seed
+      - alice
+      - --name
+      - Alice
+      - --x
+      - "0"
+      - --y
+      - "0"
+      - --range
+      - "40"
+      - --send-after
+      - "6"
+      - --message
+      - "hello from alice (multi-hop to dave)"
+      - --duration
+      - "25"
+    networks:
+      - mesh
+
+  bob:
+    build:
+      context: ../..
+      dockerfile: docker/sim/Dockerfile
+    depends_on:
+      - hub
+    command:
+      - mesh-node
+      - --hub
+      - hub:7700
+      - --id
+      - bob
+      - --seed
+      - bob
+      - --name
+      - Bob
+      - --x
+      - "25"
+      - --y
+      - "0"
+      - --range
+      - "40"
+      - --send-after
+      - "10"
+      - --message
+      - "bob checking in"
+      - --duration
+      - "25"
+    networks:
+      - mesh
+
+  carol:
+    build:
+      context: ../..
+      dockerfile: docker/sim/Dockerfile
+    depends_on:
+      - hub
+    command:
+      - mesh-node
+      - --hub
+      - hub:7700
+      - --id
+      - carol
+      - --seed
+      - carol
+      - --name
+      - Carol
+      - --x
+      - "50"
+      - --y
+      - "0"
+      - --range
+      - "40"
+      - --duration
+      - "25"
+    networks:
+      - mesh
+
+  dave:
+    build:
+      context: ../..
+      dockerfile: docker/sim/Dockerfile
+    depends_on:
+      - hub
+    command:
+      - mesh-node
+      - --hub
+      - hub:7700
+      - --id
+      - dave
+      - --seed
+      - dave
+      - --name
+      - Dave
+      - --x
+      - "75"
+      - --y
+      - "0"
+      - --range
+      - "40"
+      - --send-after
+      - "12"
+      - --message
+      - "dave says hi back"
+      - --duration
+      - "25"
+    networks:
+      - mesh
+
+networks:
+  mesh:
+    driver: bridge

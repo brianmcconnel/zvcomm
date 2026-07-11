@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -66,6 +67,48 @@ Future<void> main(List<String> arguments) async {
         ..addFlag('presence', defaultsTo: false)
         ..addOption('broadcasts', defaultsTo: '1'),
     )
+    ..addCommand(
+      'hub',
+      ArgParser()
+        ..addOption('host', defaultsTo: '0.0.0.0', help: 'Bind address')
+        ..addOption('port', defaultsTo: '7700')
+        ..addOption('loss', defaultsTo: '0', help: 'Packet loss 0..1')
+        ..addOption('delay-ms', defaultsTo: '0', help: 'Link delay ms'),
+    )
+    ..addCommand(
+      'mesh-node',
+      ArgParser()
+        ..addOption('hub', defaultsTo: '127.0.0.1:7700', help: 'host:port')
+        ..addOption('id', help: 'Node id (default: seed)')
+        ..addOption('seed', defaultsTo: 'node', help: 'Identity seed')
+        ..addOption('name', help: 'Display name')
+        ..addOption('x', defaultsTo: '0', help: 'Simulated X position')
+        ..addOption('y', defaultsTo: '0', help: 'Simulated Y position')
+        ..addOption('range', defaultsTo: '40', help: 'Radio range meters')
+        ..addOption(
+          'duration',
+          defaultsTo: '30',
+          help: 'Seconds to run before exit',
+        )
+        ..addOption(
+          'send-after',
+          defaultsTo: '5',
+          help: 'Seconds after start before sending chat',
+        )
+        ..addOption(
+          'message',
+          help: 'Chat text to send (omit to receive only)',
+        )
+        ..addOption(
+          'to',
+          help: 'Unicast destination node id (default: broadcast)',
+        )
+        ..addFlag(
+          'json',
+          defaultsTo: true,
+          help: 'Emit JSON lines for events',
+        ),
+    )
     ..addCommand('version', ArgParser());
 
   ArgResults results;
@@ -98,6 +141,10 @@ Future<void> main(List<String> arguments) async {
       await _cmdNoiseDemo(results.command!);
     case 'sim':
       await _cmdSim(results.command!);
+    case 'hub':
+      await _cmdHub(results.command!);
+    case 'mesh-node':
+      await _cmdMeshNode(results.command!);
     default:
       _usage(parser);
       exitCode = 64;
@@ -114,7 +161,9 @@ Commands:
   ca-issue    Issue an Ed25519 mesh certificate
   enroll      Create enrollment request (and optionally issue)
   noise-demo  Run initiator/responder handshake + AEAD round-trip
-  sim         Mesh simulation
+  sim         In-process mesh simulation
+  hub         TCP radio hub for multi-process / Docker sims
+  mesh-node   Join hub as a MeshNode client
   version
 
 ${parser.usage}
@@ -304,4 +353,166 @@ Future<void> _cmdSim(ArgResults cmd) async {
   );
   stdout.writeln(result);
   stdout.writeln(const JsonEncoder.withIndent('  ').convert(result.toJson()));
+}
+
+Future<void> _cmdHub(ArgResults cmd) async {
+  final host = cmd['host'] as String;
+  final port = int.parse(cmd['port'] as String);
+  final loss = double.parse(cmd['loss'] as String);
+  final delayMs = int.parse(cmd['delay-ms'] as String);
+  final address = host == '0.0.0.0'
+      ? InternetAddress.anyIPv4
+      : (await InternetAddress.lookup(host)).first;
+
+  final hub = SimHub(
+    address: address,
+    port: port,
+    packetLoss: loss,
+    linkDelay: Duration(milliseconds: delayMs),
+  );
+  await hub.start();
+
+  // Stay alive until SIGINT / SIGTERM.
+  final done = Completer<void>();
+  ProcessSignal.sigint.watch().listen((_) {
+    if (!done.isCompleted) done.complete();
+  });
+  try {
+    ProcessSignal.sigterm.watch().listen((_) {
+      if (!done.isCompleted) done.complete();
+    });
+  } catch (_) {
+    // sigterm not available on all platforms
+  }
+  await done.future;
+  await hub.stop();
+}
+
+Future<void> _cmdMeshNode(ArgResults cmd) async {
+  final hubSpec = cmd['hub'] as String;
+  final parts = hubSpec.split(':');
+  final hubHost = parts.first;
+  final hubPort = parts.length > 1 ? int.parse(parts[1]) : 7700;
+
+  final seed = cmd['seed'] as String;
+  final id = (cmd['id'] as String?) ?? seed;
+  final name = (cmd['name'] as String?) ?? id;
+  final x = double.parse(cmd['x'] as String);
+  final y = double.parse(cmd['y'] as String);
+  final range = double.parse(cmd['range'] as String);
+  final durationSec = int.parse(cmd['duration'] as String);
+  final sendAfterSec = int.parse(cmd['send-after'] as String);
+  final message = cmd['message'] as String?;
+  final to = cmd['to'] as String?;
+  final jsonLines = cmd['json'] as bool;
+
+  void emit(Map<String, Object?> event) {
+    if (jsonLines) {
+      stdout.writeln(jsonEncode(event));
+    } else {
+      stdout.writeln(event);
+    }
+  }
+
+  final identity = await DeviceIdentity.fromSeed(seed, displayName: name);
+  final transport = TcpSimTransport(
+    hubHost: hubHost,
+    hubPort: hubPort,
+    localId: id,
+    displayName: name,
+    x: x,
+    y: y,
+    rangeMeters: range,
+    log: (line) => emit({'event': 'log', 'node': id, 'message': line}),
+  );
+
+  // Retry hub connect (Docker DNS / startup race).
+  Object? lastErr;
+  for (var i = 0; i < 30; i++) {
+    try {
+      await transport.connectToHub();
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+  }
+  if (lastErr != null) {
+    stderr.writeln('failed to connect to hub $hubSpec: $lastErr');
+    exitCode = 1;
+    return;
+  }
+
+  final node = MeshNode(
+    localId: id,
+    displayName: name,
+    transports: TransportManager([transport]),
+    config: const MeshConfig(
+      presenceInterval: Duration(seconds: 5),
+    ),
+  );
+
+  final subs = <StreamSubscription<dynamic>>[];
+  subs.add(node.peerUpdates.listen((p) {
+    emit({
+      'event': 'peer',
+      'node': id,
+      'peerId': p.id,
+      'displayName': p.displayName,
+      'rssi': p.rssi,
+    });
+  }));
+  subs.add(node.messages.listen((m) {
+    if (m.kind != MessageKind.chat) return;
+    String text;
+    try {
+      text = MessageCensor.censor(utf8.decode(m.payload));
+    } catch (_) {
+      text = '[binary ${m.payload.length} B]';
+    }
+    emit({
+      'event': 'chat',
+      'node': id,
+      'from': m.sourceId,
+      'to': m.destinationId,
+      'text': text,
+      'messageId': m.id,
+    });
+  }));
+
+  await node.start();
+  emit({
+    'event': 'started',
+    'node': id,
+    'identityId': identity.id,
+    'hub': hubSpec,
+    'position': {'x': x, 'y': y},
+    'range': range,
+  });
+
+  if (message != null && message.isNotEmpty) {
+    Future<void>.delayed(Duration(seconds: sendAfterSec), () async {
+      try {
+        await node.sendChat(message, to: to);
+        emit({
+          'event': 'sent',
+          'node': id,
+          'to': to,
+          'text': MessageCensor.censor(message),
+        });
+      } catch (e) {
+        emit({'event': 'send_error', 'node': id, 'error': e.toString()});
+      }
+    });
+  }
+
+  await Future<void>.delayed(Duration(seconds: durationSec));
+  emit({'event': 'stopping', 'node': id});
+  for (final s in subs) {
+    await s.cancel();
+  }
+  await node.dispose();
+  await transport.dispose();
+  emit({'event': 'stopped', 'node': id});
 }
