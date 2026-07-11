@@ -1,0 +1,394 @@
+# Build ZVComm for all platforms Flutter supports in CI.
+# Artifacts appear on the Actions run summary (retain 14 days; 30 on tags).
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_CHANNEL: stable
+  APP_DIR: apps/app
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Shared: resolve version string for artifact names
+  # -------------------------------------------------------------------------
+  meta:
+    name: Meta
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      retention: ${{ steps.ver.outputs.retention }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ver
+        run: |
+          VER=$(grep -E '^version:' apps/app/pubspec.yaml | head -1 | awk '{print $2}' | tr -d '"'"'" | tr '+' '-')
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "retention=30" >> "$GITHUB_OUTPUT"
+          else
+            echo "retention=14" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Building version $VER"
+
+  # -------------------------------------------------------------------------
+  # Linux desktop
+  # -------------------------------------------------------------------------
+  linux:
+    name: Linux desktop
+    needs: meta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: Pub get
+        run: |
+          dart pub get
+          cd "$APP_DIR" && flutter pub get
+
+      - name: Build Linux release
+        run: cd "$APP_DIR" && flutter build linux --release
+
+      - name: Package
+        run: |
+          OUT="zvcomm-${{ needs.meta.outputs.version }}-linux-x64"
+          mkdir -p "dist/$OUT"
+          cp -a apps/app/build/linux/x64/release/bundle/. "dist/$OUT/"
+          cd dist && tar -czf "${OUT}.tar.gz" "$OUT"
+          ls -lh "dist/${OUT}.tar.gz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zvcomm-linux-x64
+          path: dist/*.tar.gz
+          retention-days: ${{ fromJSON(needs.meta.outputs.retention) }}
+
+  # -------------------------------------------------------------------------
+  # Windows desktop
+  # -------------------------------------------------------------------------
+  windows:
+    name: Windows desktop
+    needs: meta
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Pub get
+        shell: bash
+        run: |
+          dart pub get
+          cd "$APP_DIR" && flutter pub get
+
+      - name: Build Windows release
+        shell: bash
+        run: cd "$APP_DIR" && flutter build windows --release
+
+      - name: Package
+        shell: bash
+        run: |
+          OUT="zvcomm-${{ needs.meta.outputs.version }}-windows-x64"
+          mkdir -p "dist/$OUT"
+          # Flutter Windows release output
+          if [ -d apps/app/build/windows/x64/runner/Release ]; then
+            cp -a apps/app/build/windows/x64/runner/Release/. "dist/$OUT/"
+          else
+            cp -a apps/app/build/windows/runner/Release/. "dist/$OUT/"
+          fi
+          cd dist
+          7z a -tzip "${OUT}.zip" "$OUT"
+          ls -lh "${OUT}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zvcomm-windows-x64
+          path: dist/*.zip
+          retention-days: ${{ fromJSON(needs.meta.outputs.retention) }}
+
+  # -------------------------------------------------------------------------
+  # macOS desktop
+  # -------------------------------------------------------------------------
+  macos:
+    name: macOS desktop
+    needs: meta
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Pub get
+        run: |
+          dart pub get
+          cd "$APP_DIR" && flutter pub get
+
+      - name: Build macOS release
+        run: cd "$APP_DIR" && flutter build macos --release
+
+      - name: Package
+        run: |
+          OUT="zvcomm-${{ needs.meta.outputs.version }}-macos"
+          mkdir -p "dist/$OUT"
+          # .app lives under build/macos/Build/Products/Release/
+          APP_PATH=$(find apps/app/build/macos -name '*.app' -type d | head -1)
+          echo "Found app: $APP_PATH"
+          cp -a "$APP_PATH" "dist/$OUT/"
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent "$OUT" "${OUT}.zip"
+          ls -lh "${OUT}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zvcomm-macos
+          path: dist/*.zip
+          retention-days: ${{ fromJSON(needs.meta.outputs.retention) }}
+
+  # -------------------------------------------------------------------------
+  # Web
+  # -------------------------------------------------------------------------
+  web:
+    name: Web
+    needs: meta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Pub get
+        run: |
+          dart pub get
+          cd "$APP_DIR" && flutter pub get
+
+      - name: Ensure web platform
+        run: |
+          cd "$APP_DIR"
+          if [ ! -f web/index.html ]; then
+            flutter create . --platforms=web
+          fi
+
+      - name: Build web release
+        run: cd "$APP_DIR" && flutter build web --release
+
+      - name: Package
+        run: |
+          OUT="zvcomm-${{ needs.meta.outputs.version }}-web"
+          mkdir -p dist
+          cd apps/app/build
+          tar -czf "../../../dist/${OUT}.tar.gz" web
+          ls -lh "../../../dist/${OUT}.tar.gz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zvcomm-web
+          path: dist/*.tar.gz
+          retention-days: ${{ fromJSON(needs.meta.outputs.retention) }}
+
+  # -------------------------------------------------------------------------
+  # Android (APK + App Bundle)
+  # -------------------------------------------------------------------------
+  android:
+    name: Android
+    needs: meta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Pub get
+        run: |
+          dart pub get
+          cd "$APP_DIR" && flutter pub get
+
+      - name: Build Android APK (split per ABI)
+        run: |
+          cd "$APP_DIR"
+          flutter build apk --release --split-per-abi
+
+      - name: Build Android App Bundle
+        run: |
+          cd "$APP_DIR"
+          flutter build appbundle --release
+
+      - name: Package
+        run: |
+          VER="${{ needs.meta.outputs.version }}"
+          mkdir -p dist
+          # APKs
+          for apk in apps/app/build/app/outputs/flutter-apk/*.apk; do
+            base=$(basename "$apk")
+            cp "$apk" "dist/zvcomm-${VER}-${base}"
+          done
+          # AAB
+          for aab in apps/app/build/app/outputs/bundle/release/*.aab; do
+            cp "$aab" "dist/zvcomm-${VER}-release.aab"
+          done
+          ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zvcomm-android
+          path: dist/*
+          retention-days: ${{ fromJSON(needs.meta.outputs.retention) }}
+
+  # -------------------------------------------------------------------------
+  # iOS (unsigned .app — no Apple signing secrets required)
+  # -------------------------------------------------------------------------
+  ios:
+    name: iOS (no codesign)
+    needs: meta
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Pub get
+        run: |
+          dart pub get
+          cd "$APP_DIR" && flutter pub get
+
+      - name: Build iOS release (no codesign)
+        run: |
+          cd "$APP_DIR"
+          flutter build ios --release --no-codesign
+
+      - name: Package
+        run: |
+          OUT="zvcomm-${{ needs.meta.outputs.version }}-ios-unsigned"
+          mkdir -p "dist/$OUT"
+          # Runner.app under build/ios/iphoneos or similar
+          APP_PATH=$(find apps/app/build/ios -name 'Runner.app' -type d | head -1)
+          echo "Found: $APP_PATH"
+          cp -a "$APP_PATH" "dist/$OUT/"
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent "$OUT" "${OUT}.zip"
+          ls -lh "${OUT}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zvcomm-ios-unsigned
+          path: dist/*.zip
+          retention-days: ${{ fromJSON(needs.meta.outputs.retention) }}
+
+  # -------------------------------------------------------------------------
+  # CLI native binaries (linux / windows / macos)
+  # -------------------------------------------------------------------------
+  cli:
+    name: CLI (${{ matrix.os }})
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: linux-x64
+            out: zvcomm-cli
+          - os: windows-latest
+            artifact: windows-x64
+            out: zvcomm-cli.exe
+          - os: macos-latest
+            artifact: macos
+            out: zvcomm-cli
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Pub get
+        shell: bash
+        run: dart pub get
+
+      - name: Compile CLI
+        shell: bash
+        run: |
+          mkdir -p dist
+          dart compile exe apps/cli/bin/cli.dart -o "dist/${{ matrix.out }}"
+          ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zvcomm-cli-${{ matrix.artifact }}
+          path: dist/${{ matrix.out }}
+          retention-days: ${{ fromJSON(needs.meta.outputs.retention) }}
+
+  # -------------------------------------------------------------------------
+  # Optional: attach artifacts to a GitHub Release on tags
+  # -------------------------------------------------------------------------
+  release:
+    name: GitHub Release
+    needs:
+      - meta
+      - linux
+      - windows
+      - macos
+      - web
+      - android
+      - ios
+      - cli
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name '*.apk' -o -name '*.aab' -o -name 'zvcomm-cli*' -o -name 'zvcomm-cli.exe' \) -exec cp -v {} release/ \;
+          ls -lhR release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          fail_on_unmatched_files: false

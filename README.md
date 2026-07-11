@@ -195,8 +195,19 @@ dart run tool/license_check.dart
 ## Docs
 
 - [Architecture overview](docs/architecture/overview.md)
+- [Repository layout](docs/REPOSITORY_LAYOUT.md)
+- [CI builds (all platforms)](docs/CI_BUILDS.md)
+- [Packaging](docs/packaging.md)
 - [Project plan](docs/PROJECT_PLAN.md)
 - [License allow-list](docs/licenses/ALLOWLIST.md)
+
+## CI builds
+
+Push to `main` or run **Actions → Build → Run workflow** to produce:
+
+Linux · Windows · macOS · Web · Android (APK/AAB) · iOS (unsigned) · CLI binaries
+
+Download artifacts from the workflow run page. Tags `v*` also create a GitHub Release. See [docs/CI_BUILDS.md](docs/CI_BUILDS.md).
 
 ---
 

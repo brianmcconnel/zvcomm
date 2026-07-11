@@ -12,7 +12,12 @@ App version lives in `apps/app/pubspec.yaml` (`version: X.Y.Z+build`).
 | macOS | `flutter build macos` → DMG/notarize |
 | Windows | `flutter build windows` → MSIX optional |
 
-## Build commands
+## CI (recommended)
+
+GitHub Actions **Build** workflow (`.github/workflows/build.yml`) produces all
+platform artifacts. See [CI_BUILDS.md](CI_BUILDS.md).
+
+## Local build commands
 
 ```bash
 export PATH="$HOME/flutter/bin:$PATH"
@@ -21,9 +26,11 @@ cd apps/app
 flutter build apk --release
 flutter build appbundle --release
 flutter build linux --release
-flutter build windows --release
-flutter build macos --release
-flutter build ipa --release   # macOS host + signing
+flutter build windows --release   # Windows host
+flutter build macos --release     # macOS host
+flutter build web --release
+flutter build ios --release --no-codesign   # macOS host
+flutter build ipa --release                 # macOS + signing
 ```
 
 ## Android checklist
