@@ -33,4 +33,15 @@ void main() {
     );
     expect(find.text('Alice'), findsOneWidget);
   });
+
+  test('all ZVBible-aligned themes build', () {
+    expect(ZvcommTheme.all, hasLength(13));
+    expect(ZvcommTheme.byId('dark').id, 'dark');
+    expect(ZvcommTheme.byId('ocean').accent, const Color(0xFF2DD4BF));
+    for (final p in ZvcommTheme.all) {
+      final theme = p.toThemeData();
+      expect(theme.colorScheme.primary, p.accent);
+      expect(theme.scaffoldBackgroundColor, p.bgApp);
+    }
+  });
 }

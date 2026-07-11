@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:core/core.dart';
+import 'package:ui/ui.dart';
 
 import '../services/mesh_controller.dart';
 
 class SettingsScreen extends StatelessWidget {
   final MeshController mesh;
+  final ThemeController themeController;
 
-  const SettingsScreen({super.key, required this.mesh});
+  const SettingsScreen({
+    super.key,
+    required this.mesh,
+    required this.themeController,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +20,11 @@ class SettingsScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        ListenableBuilder(
+          listenable: themeController,
+          builder: (context, _) => ThemePicker(controller: themeController),
+        ),
+        const SizedBox(height: 24),
         Text('Discovery', style: Theme.of(context).textTheme.titleMedium),
         SwitchListTile(
           title: const Text('Mesh discovery'),
@@ -69,7 +80,7 @@ class SettingsScreen extends StatelessWidget {
           title: Text('ZVComm'),
           subtitle: Text(
             'Short-range mesh · Apache-2.0 · Phase 5\n'
-            'Pluggable transports · hardware adapters',
+            'Themes aligned with ZVBible · pluggable transports',
           ),
         ),
         ListTile(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ui/ui.dart';
 
 import '../services/mesh_controller.dart';
 import 'chat_screen.dart';
@@ -8,8 +9,13 @@ import 'status_screen.dart';
 
 class HomeShell extends StatefulWidget {
   final MeshController mesh;
+  final ThemeController themeController;
 
-  const HomeShell({super.key, required this.mesh});
+  const HomeShell({
+    super.key,
+    required this.mesh,
+    required this.themeController,
+  });
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -32,13 +38,21 @@ class _HomeShellState extends State<HomeShell> {
       ),
       ChatScreen(mesh: mesh),
       StatusScreen(mesh: mesh),
-      SettingsScreen(mesh: mesh),
+      SettingsScreen(
+        mesh: mesh,
+        themeController: widget.themeController,
+      ),
     ];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('ZVComm'),
         actions: [
+          IconButton(
+            tooltip: 'Cycle theme',
+            onPressed: widget.themeController.cycle,
+            icon: const Icon(Icons.palette_outlined),
+          ),
           IconButton(
             tooltip: 'Cycle power mode',
             onPressed: mesh.cyclePowerMode,
