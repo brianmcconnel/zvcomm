@@ -69,6 +69,50 @@ class _CredentialsScreenState extends State<CredentialsScreen>
     }
   }
 
+  Future<void> _nfcShare() async {
+    setState(() => _busy = true);
+    try {
+      await mesh.shareCredentialViaNfc();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('NFC share ready — hold phones together'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('NFC share failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _nfcReceive() async {
+    setState(() => _busy = true);
+    try {
+      await mesh.receiveCredentialViaNfc();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('NFC receive ready — hold near peer or tag'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('NFC receive failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _import() async {
     setState(() {
       _busy = true;
@@ -137,8 +181,9 @@ class _CredentialsScreenState extends State<CredentialsScreen>
         ),
         const SizedBox(height: 4),
         Text(
-          'Show this QR or short code to a nearby peer. They import it to trust '
-          'your public keys for secure sessions. Private keys never leave the device.',
+          'Show this QR, short code, or use NFC tap to a nearby peer. '
+          'They import it to trust your public keys for secure sessions. '
+          'Private keys never leave the device.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
@@ -158,6 +203,36 @@ class _CredentialsScreenState extends State<CredentialsScreen>
           isThreeLine: true,
         ),
         const SizedBox(height: 8),
+        Text('NFC', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          mesh.nfcAvailable
+              ? (mesh.nfcCredentialArmed
+                  ? 'NFC session armed — hold phones together (or cancel).'
+                  : 'Tap to write your credential on the next NFC contact.')
+              : 'Enable the NFC plugin in Settings (phone with NFC required).',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        FilledButton.tonalIcon(
+          onPressed: (_busy || !mesh.nfcAvailable) ? null : _nfcShare,
+          icon: const Icon(Icons.nfc),
+          label: Text(
+            mesh.nfcCredentialArmed ? 'NFC share armed…' : 'Share via NFC tap',
+          ),
+        ),
+        if (mesh.nfcCredentialArmed) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () {
+              mesh.cancelNfcCredentialExchange();
+              setState(() {});
+            },
+            icon: const Icon(Icons.cancel_outlined),
+            label: const Text('Cancel NFC'),
+          ),
+        ],
+        const SizedBox(height: 16),
         FilledButton.icon(
           onPressed: _busy ? null : _publish,
           icon: const Icon(Icons.cell_tower),
@@ -186,11 +261,25 @@ class _CredentialsScreenState extends State<CredentialsScreen>
         ),
         const SizedBox(height: 4),
         Text(
-          'Paste a QR payload (zvcomm:cred:v1:…) or enter a short code after '
-          'the peer publishes an offer on the mesh.',
+          'Paste a QR payload (zvcomm:cred:v1:…), enter a short code after '
+          'the peer publishes on mesh, or receive via NFC tap.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 12),
+        FilledButton.tonalIcon(
+          onPressed: (_busy || !mesh.nfcAvailable) ? null : _nfcReceive,
+          icon: const Icon(Icons.nfc),
+          label: const Text('Receive via NFC tap'),
+        ),
+        if (!mesh.nfcAvailable)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'NFC plugin off or no radio — enable in Settings.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        const SizedBox(height: 16),
         TextField(
           controller: _importCtrl,
           decoration: const InputDecoration(

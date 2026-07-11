@@ -9,14 +9,18 @@ import 'package:core/core.dart';
 
 import 'nfc_payload.dart';
 
-/// NFC transport optimized for pairing / bootstrap and short messages.
+/// NFC transport optimized for pairing / bootstrap, short messages, and
+/// public-credential exchange (share / receive on tap).
 ///
 /// Continuous discovery runs an NFC reader session; each NDEF tag with a
-/// ZVComm record is reported as a [Peer]. Optional write carries local identity.
+/// ZVComm record is reported as a [Peer]. Optional write carries local identity
+/// and/or a [PublicCredential] for QR-less trust bootstrap.
 final class NfcTransport implements Transport, ConnectionlessSend {
   final StreamController<Peer> _discovery = StreamController<Peer>.broadcast();
   final StreamController<Connection> _inbound =
       StreamController<Connection>.broadcast();
+  final StreamController<PublicCredential> _credentials =
+      StreamController<PublicCredential>.broadcast();
 
   String _localId = '';
   String _displayName = '';
@@ -25,6 +29,8 @@ final class NfcTransport implements Transport, ConnectionlessSend {
   bool _discovering = false;
   bool _writeOnTap = false;
   Uint8List? _pendingSend;
+  PublicCredential? _pendingCredential;
+  String _sessionAlert = 'Hold near a ZVComm peer or tag';
 
   @override
   TransportKind get kind => TransportKind.nfc;
@@ -45,8 +51,45 @@ final class NfcTransport implements Transport, ConnectionlessSend {
   @override
   Stream<Connection> get incomingConnections => _inbound.stream;
 
+  /// Stream of public credentials read from NFC tags / peer phones.
+  Stream<PublicCredential> get credentialReads => _credentials.stream;
+
+  /// Whether a share-credential write is armed for the next tap.
+  bool get isCredentialShareArmed => _pendingCredential != null;
+
   /// When true, the next discovered writable tag receives our identity NDEF.
   set writeIdentityOnNextTap(bool value) => _writeOnTap = value;
+
+  /// Arm the next NFC tap to write [credential] as an NDEF MIME record.
+  ///
+  /// Starts a reader session if needed. Call [cancelCredentialShare] to abort.
+  Future<void> shareCredentialOnNextTap(
+    PublicCredential credential, {
+    String? localId,
+    String? displayName,
+  }) async {
+    _pendingCredential = credential;
+    _localId = localId ?? credential.subjectId;
+    _displayName = displayName ?? credential.displayName;
+    _writeOnTap = true;
+    _sessionAlert = 'Hold phones together to share credentials';
+    await _ensureSession(forceRestart: true);
+  }
+
+  /// Arm a receive-only session (read peer credential on tap).
+  Future<void> receiveCredentialOnNextTap() async {
+    _pendingCredential = null;
+    _writeOnTap = false;
+    _sessionAlert = 'Hold near peer phone or tag to import credentials';
+    await _ensureSession(forceRestart: true);
+  }
+
+  /// Clear a pending credential write without stopping discovery.
+  void cancelCredentialShare() {
+    _pendingCredential = null;
+    _writeOnTap = false;
+    _sessionAlert = 'Hold near a ZVComm peer or tag';
+  }
 
   @override
   Future<bool> isAvailable() async {
@@ -75,12 +118,24 @@ final class NfcTransport implements Transport, ConnectionlessSend {
   @override
   Future<void> stopAdvertising() async {
     _writeOnTap = false;
+    _pendingCredential = null;
   }
 
   @override
   Stream<Peer> discover() {
-    unawaited(_startSession());
+    unawaited(_ensureSession());
     return _discovery.stream;
+  }
+
+  Future<void> _ensureSession({bool forceRestart = false}) async {
+    if (_sessionActive && !forceRestart) return;
+    if (_sessionActive && forceRestart) {
+      try {
+        await NfcManager.instance.stopSession();
+      } catch (_) {}
+      _sessionActive = false;
+    }
+    await _startSession();
   }
 
   Future<void> _startSession() async {
@@ -96,7 +151,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
           NfcPollingOption.iso14443,
           NfcPollingOption.iso15693,
         },
-        alertMessageIos: 'Hold near a ZVComm peer or tag',
+        alertMessageIos: _sessionAlert,
         invalidateAfterFirstReadIos: false,
         onDiscovered: _onTag,
       );
@@ -116,12 +171,14 @@ final class NfcTransport implements Transport, ConnectionlessSend {
 
       Peer? peer;
       Uint8List? extra;
+      PublicCredential? receivedCred;
       if (message != null) {
         for (final record in message.records) {
           final payload = _parseRecord(record);
           if (payload != null) {
             peer = payload.toPeer();
             extra = payload.data;
+            receivedCred = payload.credential;
             break;
           }
         }
@@ -131,14 +188,21 @@ final class NfcTransport implements Transport, ConnectionlessSend {
         _discovery.add(peer);
       }
 
-      final shouldWrite = _writeOnTap || _pendingSend != null;
+      if (receivedCred != null && !_credentials.isClosed) {
+        _credentials.add(receivedCred);
+      }
+
+      final shouldWrite =
+          _writeOnTap || _pendingSend != null || _pendingCredential != null;
       if (shouldWrite && ndef.isWritable) {
-        final bootstrap = NfcBootstrapPayload(
-          peerId: _localId,
-          displayName: _displayName,
-          metadata: _metadata,
-          data: _pendingSend,
-        );
+        final bootstrap = _pendingCredential != null
+            ? NfcBootstrapPayload.forCredential(_pendingCredential!)
+            : NfcBootstrapPayload(
+                peerId: _localId,
+                displayName: _displayName,
+                metadata: _metadata,
+                data: _pendingSend,
+              );
         final record = NdefRecord(
           typeNameFormat: TypeNameFormat.media,
           type: Uint8List.fromList(utf8.encode(ZvcommProtocol.nfcMimeType)),
@@ -147,7 +211,9 @@ final class NfcTransport implements Transport, ConnectionlessSend {
         );
         await ndef.write(message: NdefMessage(records: [record]));
         _pendingSend = null;
+        _pendingCredential = null;
         _writeOnTap = false;
+        _sessionAlert = 'Hold near a ZVComm peer or tag';
       }
 
       if (peer != null && extra != null && extra.isNotEmpty) {
@@ -170,6 +236,17 @@ final class NfcTransport implements Transport, ConnectionlessSend {
         return NfcBootstrapPayload.fromBytes(record.payload);
       }
       final text = utf8.decode(record.payload, allowMalformed: true);
+      // QR-style credential URI on a plain text NDEF record.
+      if (text.contains('zvcomm:cred:')) {
+        final start = text.indexOf('zvcomm:cred:');
+        final end = text.indexOf(RegExp(r'[\s]'), start);
+        final uri =
+            end < 0 ? text.substring(start) : text.substring(start, end);
+        try {
+          final cred = PublicCredential.parse(uri.trim());
+          return NfcBootstrapPayload.forCredential(cred);
+        } catch (_) {}
+      }
       if (text.contains('zvcomm://peer/')) {
         final idx = text.indexOf('zvcomm://peer/');
         final rest = text.substring(idx + 'zvcomm://peer/'.length);
@@ -198,7 +275,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
       _pendingSend = data;
       _writeOnTap = true;
       if (!_sessionActive) {
-        unawaited(_startSession());
+        unawaited(_ensureSession());
       }
     };
     return conn;
@@ -209,7 +286,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
     _pendingSend = data;
     _writeOnTap = true;
     if (!_sessionActive && _discovering) {
-      await _startSession();
+      await _ensureSession();
     }
   }
 
@@ -219,7 +296,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
       await stopDiscovery();
       _discovering = true; // remember intent for resume
     } else if (_discovering && !_sessionActive) {
-      await _startSession();
+      await _ensureSession();
     }
   }
 
@@ -228,6 +305,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
     await stopDiscovery();
     await _discovery.close();
     await _inbound.close();
+    await _credentials.close();
   }
 }
 

@@ -27,10 +27,17 @@ Frames use length-prefixed binary (`StreamFrameCodec`) and are chunked to the ne
 |------|--------|
 | Plugin | [nfc_manager](https://pub.dev/packages/nfc_manager) + [nfc_manager_ndef](https://pub.dev/packages/nfc_manager_ndef) **MIT** |
 | Platforms | Android, iOS |
-| Use case | Pairing / bootstrap, short payloads |
+| Use case | Pairing / bootstrap, short payloads, **public credential exchange** |
 
-NDEF MIME type: `application/x-zvcomm` carrying JSON identity (+ optional data).
+NDEF MIME type: `application/x-zvcomm` carrying JSON identity (+ optional data / `cred` public credential).
 
+**Credential exchange (phone-to-phone or tag):**
+
+1. **Share via NFC** arms write-on-tap with a self-signed `PublicCredential` (same as QR).
+2. **Receive via NFC** reads the next NDEF ZVComm record; signature is verified and the peer is trusted.
+3. Private keys are never written to the tag / air interface.
+
+Also accepts plain-text NDEF records containing a `zvcomm:cred:v1:…` URI (QR payload on a tag).
 ## Wi-Fi (`wifi`)
 
 | Backend | When | License |

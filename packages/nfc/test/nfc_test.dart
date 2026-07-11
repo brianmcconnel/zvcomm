@@ -22,6 +22,19 @@ void main() {
     expect(restored.toPeer().transports, contains(TransportKind.nfc));
   });
 
+  test('NfcBootstrapPayload carries PublicCredential', () async {
+    final id = await DeviceIdentity.fromSeed('nfc-alice', displayName: 'Alice');
+    final cred = await PublicCredential.fromIdentity(id);
+    final p = NfcBootstrapPayload.forCredential(cred);
+    final restored = NfcBootstrapPayload.fromBytes(p.toBytes());
+    expect(restored.credential, isNotNull);
+    expect(restored.credential!.subjectId, id.id);
+    expect(restored.credential!.shortCode, cred.shortCode);
+    expect(await restored.credential!.verify(), isTrue);
+    expect(restored.toPeer().id, id.id);
+    expect(restored.toPeer().metadata['shortCode'], cred.shortCode);
+  });
+
   test('NfcTransport kind and capabilities', () async {
     final t = NfcTransport();
     expect(t.kind, TransportKind.nfc);

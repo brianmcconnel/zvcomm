@@ -12,7 +12,8 @@ void registerNfcPlugin([TransportRegistry? registry]) {
       kind: TransportKind.nfc,
       priority: 10,
       enabledByDefault: true,
-      description: 'NDEF bootstrap / short payloads (MIT plugins).',
+      description:
+          'NDEF bootstrap, short payloads, and public-credential exchange (MIT plugins).',
       capabilities: const TransportCapabilities(
         canDiscover: true,
         canConnect: true,

@@ -46,6 +46,7 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
   StreamSubscription<PresenceInfo>? _presenceSub;
   StreamSubscription<FileTransferProgress>? _xferSub;
   StreamSubscription<({FileTransferInfo info, Uint8List bytes})>? _xferDoneSub;
+  StreamSubscription<PublicCredential>? _nfcCredSub;
 
   bool ready = false;
   bool running = false;
@@ -54,6 +55,9 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
   String? status;
   String? selectedPeerId;
   String displayName = 'This device';
+
+  /// True while an NFC credential share/receive session is armed.
+  bool nfcCredentialArmed = false;
 
   Future<void> bootstrap() async {
     _registerPlugins();
@@ -124,8 +128,9 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
       }
     });
 
-    // Pre-build shareable credential for QR / short code.
+    // Pre-build shareable credential for QR / short code / NFC.
     localCredential = await PublicCredential.fromIdentity(id);
+    _listenNfcCredentials();
 
     _presenceSub = node!.presenceUpdates.listen((p) {
       livePresence.removeWhere((e) => e.peerId == p.peerId);
@@ -210,12 +215,20 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
         await mgr.register(t);
         pluginTransports[pluginId] = t;
         chat.addSystem('Enabled transport plugin ${plugin.name}');
+        if (pluginId == nfcPluginId) {
+          _listenNfcCredentials();
+        }
       } catch (e) {
         chat.addSystem('Failed to enable ${plugin.name}: $e');
       }
     } else if (existing != null) {
       await mgr.unregister(existing);
       pluginTransports.remove(pluginId);
+      if (pluginId == nfcPluginId) {
+        unawaited(_nfcCredSub?.cancel());
+        _nfcCredSub = null;
+        nfcCredentialArmed = false;
+      }
       chat.addSystem('Disabled transport plugin ${plugin.name}');
     }
 
@@ -425,6 +438,105 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Active [NfcTransport] if the NFC plugin is enabled, else null.
+  NfcTransport? get nfcTransport {
+    final t = pluginTransports[nfcPluginId];
+    return t is NfcTransport ? t : null;
+  }
+
+  bool get nfcAvailable => nfcTransport != null;
+
+  void _listenNfcCredentials() {
+    unawaited(_nfcCredSub?.cancel());
+    final nfc = nfcTransport;
+    if (nfc == null) return;
+    _nfcCredSub = nfc.credentialReads.listen((cred) {
+      unawaited(_onNfcCredential(cred));
+    });
+  }
+
+  Future<void> _onNfcCredential(PublicCredential cred) async {
+    try {
+      if (!await cred.verify()) {
+        chat.addSystem('NFC credential signature invalid');
+        notifyListeners();
+        return;
+      }
+      if (identity != null && cred.subjectId == identity!.id) return;
+
+      // Auto-trust on intentional NFC receive/share flow.
+      trustedCredentials[cred.subjectId] = cred;
+      offerCache.put(cred);
+      nfcCredentialArmed = nfcTransport?.isCredentialShareArmed ?? false;
+      chat.addSystem(
+        'NFC trusted: '
+        '${cred.displayName.isEmpty ? cred.subjectId : cred.displayName}'
+        ' · ${cred.shortCode}',
+      );
+      status = 'NFC import ${cred.shortCode}';
+      notifyListeners();
+    } catch (e) {
+      chat.addSystem('NFC credential error: $e');
+      notifyListeners();
+    }
+  }
+
+  /// Write local public credential on the next NFC tap (phone-to-phone / tag).
+  Future<void> shareCredentialViaNfc() async {
+    final nfc = nfcTransport;
+    if (nfc == null) {
+      throw StateError(
+        'NFC not available — enable the NFC plugin and use a phone with NFC',
+      );
+    }
+    final available = await nfc.isAvailable();
+    if (!available) {
+      throw StateError('NFC is disabled or not present on this device');
+    }
+    var cred = localCredential;
+    final id = identity;
+    if (id == null) throw StateError('no local identity');
+    cred ??= await PublicCredential.fromIdentity(id);
+    localCredential = cred;
+    await nfc.shareCredentialOnNextTap(
+      cred,
+      localId: id.id,
+      displayName: id.displayName,
+    );
+    nfcCredentialArmed = true;
+    status = 'NFC share armed · ${cred.shortCode}';
+    chat.addSystem(
+      'NFC share ready — hold phones together to write ${cred.shortCode}',
+    );
+    notifyListeners();
+  }
+
+  /// Start NFC session to read a peer credential (import on tap).
+  Future<void> receiveCredentialViaNfc() async {
+    final nfc = nfcTransport;
+    if (nfc == null) {
+      throw StateError(
+        'NFC not available — enable the NFC plugin and use a phone with NFC',
+      );
+    }
+    final available = await nfc.isAvailable();
+    if (!available) {
+      throw StateError('NFC is disabled or not present on this device');
+    }
+    await nfc.receiveCredentialOnNextTap();
+    nfcCredentialArmed = true;
+    status = 'NFC receive armed';
+    chat.addSystem('NFC receive ready — hold near peer phone or tag');
+    notifyListeners();
+  }
+
+  void cancelNfcCredentialExchange() {
+    nfcTransport?.cancelCredentialShare();
+    nfcCredentialArmed = false;
+    status = 'NFC credential exchange cancelled';
+    notifyListeners();
+  }
+
   Future<void> sendDemoFile() async {
     final t = transfers;
     if (t == null) return;
@@ -472,6 +584,7 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   @override
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     mockTransport?.cancelDiscoverySync();
@@ -484,6 +597,7 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(_presenceSub?.cancel());
     unawaited(_xferSub?.cancel());
     unawaited(_xferDoneSub?.cancel());
+    unawaited(_nfcCredSub?.cancel());
     unawaited(transfers?.dispose());
     unawaited(node?.dispose());
     unawaited(demoPeer?.dispose());
