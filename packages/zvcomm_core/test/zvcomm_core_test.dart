@@ -346,6 +346,58 @@ void main() {
     });
   });
 
+  group('FileTransferService', () {
+    test('sends and reassembles file over mock mesh', () async {
+      final medium = MockMedium();
+      final tA = MockTransport(
+        medium: medium,
+        localId: 'a',
+        displayName: 'A',
+        position: const SimPoint(0, 0),
+      );
+      final tB = MockTransport(
+        medium: medium,
+        localId: 'b',
+        displayName: 'B',
+        position: const SimPoint(5, 0),
+      );
+      final nodeA = MeshNode(
+        localId: 'a',
+        transports: TransportManager([tA]),
+        config: const MeshConfig(presenceInterval: Duration.zero),
+      );
+      final nodeB = MeshNode(
+        localId: 'b',
+        transports: TransportManager([tB]),
+        config: const MeshConfig(presenceInterval: Duration.zero),
+      );
+      final xferA = FileTransferService(node: nodeA, chunkSize: 50);
+      final xferB = FileTransferService(node: nodeB, chunkSize: 50);
+      xferA.start();
+      xferB.start();
+
+      await nodeA.start();
+      await nodeB.start();
+      await nodeA.peerUpdates
+          .firstWhere((p) => p.id == 'b')
+          .timeout(const Duration(seconds: 3));
+
+      final done = xferB.completed.first.timeout(const Duration(seconds: 5));
+      final payload = Uint8List.fromList(
+        List.generate(120, (i) => i & 0xff),
+      );
+      await xferA.sendFile(fileName: 'demo.bin', bytes: payload, to: 'b');
+      final received = await done;
+      expect(received.info.fileName, 'demo.bin');
+      expect(received.bytes, payload);
+
+      await xferA.dispose();
+      await xferB.dispose();
+      await nodeA.dispose();
+      await nodeB.dispose();
+    });
+  });
+
   group('StreamFrameCodec', () {
     test('round-trips a payload', () {
       final payload = Uint8List.fromList(List.generate(50, (i) => i));

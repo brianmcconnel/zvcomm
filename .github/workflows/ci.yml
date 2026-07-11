@@ -71,3 +71,9 @@ jobs:
 
       - name: Widget tests
         run: cd apps/zvcomm_app && flutter test
+
+      - name: Linux release build
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+          cd apps/zvcomm_app && flutter build linux --release

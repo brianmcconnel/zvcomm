@@ -3,18 +3,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zvcomm_app/main.dart';
 
 void main() {
-  testWidgets('app shows ZVComm title and local identity', (tester) async {
+  testWidgets('app boots to peers shell with navigation', (tester) async {
     await tester.pumpWidget(const ZvcommApp());
-    await tester.pump(); // schedule bootstrap
-    // Allow async key generation + discovery start.
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
 
-    expect(find.text('ZVComm'), findsOneWidget);
+    // Wait for async identity generation + mesh bootstrap.
+    var found = false;
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+      if (find.text('ZVComm').evaluate().isNotEmpty) {
+        found = true;
+        break;
+      }
+    }
+    expect(found, isTrue, reason: 'app did not leave loading state');
+
     expect(find.text('Local identity'), findsOneWidget);
-    expect(find.textContaining('Discovered peers'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Status'), findsOneWidget);
 
-    // Tear down widget tree so MockTransport discovery timers are cancelled.
+    await tester.tap(find.text('Chat'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('Broadcast'), findsWidgets);
+
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });

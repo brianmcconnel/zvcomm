@@ -279,15 +279,12 @@ final class BleTransport implements Transport {
     if (!_platformReady || _central == null) return false;
     if (kIsWeb) return false;
     try {
-      final state = _central.state;
-      if (state == ble.BluetoothLowEnergyState.unauthorized &&
-          Platform.isAndroid) {
-        await _central.authorize();
-      }
-      await _ensurePermissions();
+      // Do not request permissions here — that can hang in tests / headless CI.
+      // Permission prompts happen when advertising or scanning starts.
       final s = _central.state;
       return s == ble.BluetoothLowEnergyState.poweredOn ||
-          s == ble.BluetoothLowEnergyState.unknown;
+          s == ble.BluetoothLowEnergyState.unknown ||
+          s == ble.BluetoothLowEnergyState.unauthorized;
     } catch (_) {
       return false;
     }

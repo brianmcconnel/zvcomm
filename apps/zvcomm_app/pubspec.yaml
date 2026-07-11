@@ -1,6 +1,8 @@
 name: zvcomm_app
-description: ZVComm – ultra-efficient short-range mesh communication (Flutter).
-version: 0.1.0+1
+description: >
+  ZVComm – ultra-efficient short-range mesh chat, files, and presence over
+  BLE, NFC, and Wi-Fi. Offline-first, Apache-2.0.
+version: 0.4.0+4
 publish_to: none
 
 environment:

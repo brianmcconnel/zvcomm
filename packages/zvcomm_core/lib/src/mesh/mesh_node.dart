@@ -81,14 +81,34 @@ final class MeshNode {
     _startPresence();
   }
 
+  Duration _presenceInterval = Duration.zero;
+  bool _background = false;
+
   void _startPresence() {
+    _presenceInterval = config.presenceInterval;
+    _restartPresenceTimer();
+    unawaited(sendPresence());
+  }
+
+  void _restartPresenceTimer() {
     _presenceTimer?.cancel();
-    if (config.presenceInterval <= Duration.zero) return;
-    _presenceTimer = Timer.periodic(config.presenceInterval, (_) {
+    final base = _presenceInterval;
+    if (base <= Duration.zero) return;
+    final interval = _background
+        ? Duration(
+            microseconds: base.inMicroseconds * config.backgroundPresenceFactor,
+          )
+        : base;
+    _presenceTimer = Timer.periodic(interval, (_) {
       unawaited(sendPresence());
     });
-    // Immediate first heartbeat.
-    unawaited(sendPresence());
+  }
+
+  /// Stretch presence / conserve energy when the app is backgrounded.
+  void setBackgroundMode(bool background) {
+    if (_background == background) return;
+    _background = background;
+    _restartPresenceTimer();
   }
 
   Future<void> stop() async {

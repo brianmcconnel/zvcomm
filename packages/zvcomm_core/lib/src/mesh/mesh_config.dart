@@ -21,6 +21,9 @@ final class MeshConfig {
   /// Original hop limit stamped for route learning (stored in packet).
   final int routeLearningBaseHopLimit;
 
+  /// When app is backgrounded, presence interval stretches by this factor.
+  final int backgroundPresenceFactor;
+
   const MeshConfig({
     this.defaultHopLimit = 8,
     this.dedupExactCapacity = 2048,
@@ -29,6 +32,7 @@ final class MeshConfig {
     this.presenceTtl = const Duration(seconds: 20),
     this.adaptiveRouting = true,
     this.routeLearningBaseHopLimit = 8,
+    this.backgroundPresenceFactor = 4,
   });
 
   static const MeshConfig defaults = MeshConfig();
@@ -41,4 +45,28 @@ final class MeshConfig {
     presenceInterval: Duration(seconds: 2),
     presenceTtl: Duration(seconds: 10),
   );
+
+  /// Battery-friendly foreground defaults.
+  static const MeshConfig powerSaver = MeshConfig(
+    presenceInterval: Duration(seconds: 15),
+    presenceTtl: Duration(seconds: 45),
+    backgroundPresenceFactor: 6,
+  );
+
+  MeshConfig copyWith({
+    int? defaultHopLimit,
+    Duration? presenceInterval,
+    Duration? presenceTtl,
+    bool? adaptiveRouting,
+  }) =>
+      MeshConfig(
+        defaultHopLimit: defaultHopLimit ?? this.defaultHopLimit,
+        dedupExactCapacity: dedupExactCapacity,
+        bloomBits: bloomBits,
+        presenceInterval: presenceInterval ?? this.presenceInterval,
+        presenceTtl: presenceTtl ?? this.presenceTtl,
+        adaptiveRouting: adaptiveRouting ?? this.adaptiveRouting,
+        routeLearningBaseHopLimit: routeLearningBaseHopLimit,
+        backgroundPresenceFactor: backgroundPresenceFactor,
+      );
 }

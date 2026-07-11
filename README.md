@@ -9,7 +9,7 @@ Bluetooth LE · NFC · Wi-Fi P2P · pluggable transports · offline-first · per
 | **License** | Apache-2.0 |
 | **Stack** | Flutter + Dart (AOT) |
 | **Platforms** | Android, iOS, Linux, macOS, Windows |
-| **Status** | Phase 3 – Security & PKI |
+| **Status** | Phase 4 – Features & Packaging |
 
 ## Architecture
 
@@ -137,6 +137,18 @@ See [docs/architecture/phase2-mesh.md](docs/architecture/phase2-mesh.md).
 - [x] CLI: `ca-init`, `ca-issue`, `enroll`, `noise-demo`
 
 See [docs/architecture/phase3-security.md](docs/architecture/phase3-security.md).
+
+## Phase 4 deliverables
+
+- [x] Chat (broadcast + peer threads)
+- [x] Chunked file transfer over mesh
+- [x] Status: transports, mesh stats, presence, transfers
+- [x] Settings + power modes
+- [x] App lifecycle battery policy (background power-saver)
+- [x] Packaging guide + version 0.4.0
+- [x] CI Linux release build
+
+See [docs/architecture/phase4-features.md](docs/architecture/phase4-features.md) and [docs/packaging.md](docs/packaging.md).
 
 ## Development phases
 
