@@ -329,6 +329,7 @@ jobs:
 
   # -------------------------------------------------------------------------
   # CLI native binaries (linux / windows / macos)
+  # Flutter SDK is required because the pub workspace includes apps/app.
   # -------------------------------------------------------------------------
   cli:
     name: CLI (${{ matrix.os }})
@@ -350,13 +351,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dart-lang/setup-dart@v1
+      # Workspace root resolves apps/app (Flutter). Plain dart-lang/setup-dart fails.
+      - uses: subosito/flutter-action@v2
         with:
-          sdk: stable
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
 
       - name: Pub get
         shell: bash
-        run: dart pub get
+        run: flutter pub get
 
       - name: Compile CLI
         shell: bash

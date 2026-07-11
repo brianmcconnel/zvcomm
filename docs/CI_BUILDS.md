@@ -44,6 +44,7 @@ The **Build** workflow attaches all artifacts to a GitHub Release with generated
 ## Notes
 
 - **Windows / macOS / iOS** jobs use GitHub-hosted runners (not WSL).
+- **CLI** jobs install Flutter (not Dart-only) so the monorepo workspace can resolve `apps/app`.
 - **Android** APKs are **debug-signed by Flutter’s default debug/upload keystore** for CI unless you add signing secrets.
 - **iOS** is intentionally **unsigned** (`--no-codesign`); store/TestFlight still need certificates and provisioning profiles.
 - Desktop plugins that need radios (BLE/NFC) may build but need hardware + OS permissions at runtime.
