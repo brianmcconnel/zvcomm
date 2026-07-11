@@ -9,9 +9,10 @@ on:
   pull_request:
     branches: [main, master]
 
+# PRs cancel stale runs; main/tag runs never cancel each other.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   analyze-test:

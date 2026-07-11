@@ -10,9 +10,11 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+# PRs: one group per PR so re-pushes cancel stale runs.
+# main/tags/manual: unique group per run_id so multi-platform jobs are never cancelled.
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 env:
   FLUTTER_CHANNEL: stable

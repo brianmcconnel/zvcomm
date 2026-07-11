@@ -14,7 +14,7 @@
 - Tags matching `v*` (also creates a GitHub Release)
 - Manual: **Actions → Build → Run workflow**
 
-**Concurrency:** in-progress runs are only cancelled for **pull requests**. Pushes to `main` / tags finish even if a newer run is queued (avoids mid-job cancels on multi-platform builds).
+**Concurrency:** pull-request re-pushes cancel the previous PR run. Pushes to `main` / tags each get a unique run group so multi-platform jobs are **never** cancelled mid-build.
 
 ## Artifacts
 
