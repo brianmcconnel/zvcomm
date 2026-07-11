@@ -1,0 +1,19 @@
+name: zvcomm
+publish_to: none
+environment:
+  sdk: ^3.5.0
+
+# Dart pub workspace (Flutter 3.16+ / Dart 3.5+)
+workspace:
+  - packages/zvcomm_core
+  - packages/zvcomm_ble
+  - packages/zvcomm_nfc
+  - packages/zvcomm_wifi
+  - packages/zvcomm_pki
+  - packages/zvcomm_sim
+  - packages/zvcomm_ui
+  - apps/zvcomm_app
+  - apps/zvcomm_cli
+
+dev_dependencies:
+  melos: ^6.3.2

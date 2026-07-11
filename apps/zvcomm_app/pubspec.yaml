@@ -1,0 +1,32 @@
+name: zvcomm_app
+description: ZVComm – ultra-efficient short-range mesh communication (Flutter).
+version: 0.1.0+1
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+  flutter: '>=3.22.0'
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  zvcomm_core:
+    path: ../../packages/zvcomm_core
+  zvcomm_ble:
+    path: ../../packages/zvcomm_ble
+  zvcomm_nfc:
+    path: ../../packages/zvcomm_nfc
+  zvcomm_wifi:
+    path: ../../packages/zvcomm_wifi
+  zvcomm_ui:
+    path: ../../packages/zvcomm_ui
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

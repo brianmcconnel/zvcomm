@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  analyze-test:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Dart pub get (workspace)
+        run: dart pub get
+
+      - name: Install melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap
+        run: dart pub global run melos bootstrap
+
+      - name: Format check
+        run: dart format --set-exit-if-changed .
+
+      - name: Analyze
+        run: dart pub global run melos exec -- dart analyze --fatal-infos
+
+      - name: Test packages
+        run: |
+          dart test packages/zvcomm_core
+          dart test packages/zvcomm_ble
+          dart test packages/zvcomm_nfc
+          dart test packages/zvcomm_wifi
+          dart test packages/zvcomm_pki
+          dart test packages/zvcomm_sim
+          dart test apps/zvcomm_cli
+
+      - name: License gate
+        run: dart run tool/license_check.dart
+
+  flutter-app:
+    name: Flutter App
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        run: |
+          dart pub get
+          cd apps/zvcomm_app && flutter pub get
+
+      - name: Analyze app
+        run: cd apps/zvcomm_app && flutter analyze
+
+      - name: Widget tests
+        run: cd apps/zvcomm_app && flutter test

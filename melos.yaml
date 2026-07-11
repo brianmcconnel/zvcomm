@@ -1,0 +1,45 @@
+name: zvcomm
+repository: https://github.com/zvcomm/zvcomm
+
+packages:
+  - packages/**
+  - apps/**
+
+command:
+  bootstrap:
+    environment:
+      sdk: ^3.5.0
+    dependencies:
+      # Shared dependency constraints can go here
+    dev_dependencies:
+      lints: ^5.0.0
+      test: ^1.25.0
+
+scripts:
+  analyze:
+    run: melos exec -- dart analyze --fatal-infos
+    description: Run analyzer on all packages
+
+  test:
+    run: melos exec --fail-fast --dir-exists=test -- dart test
+    description: Run tests in all packages
+
+  test:core:
+    run: cd packages/zvcomm_core && dart test
+    description: Run core package tests only
+
+  format:
+    run: melos exec -- dart format .
+    description: Format all Dart code
+
+  format:check:
+    run: melos exec -- dart format --set-exit-if-changed .
+    description: Check formatting
+
+  license:check:
+    run: dart run tool/license_check.dart
+    description: Verify all dependencies use permissive licenses only
+
+  get:
+    run: melos bootstrap
+    description: Bootstrap workspace dependencies

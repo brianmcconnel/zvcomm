@@ -1,0 +1,21 @@
+name: zvcomm_core
+description: >
+  Core transport abstraction, mesh networking primitives, models, and crypto
+  interfaces for ZVComm short-range communication.
+version: 0.1.0
+publish_to: none
+homepage: https://github.com/zvcomm/zvcomm
+repository: https://github.com/zvcomm/zvcomm
+
+environment:
+  sdk: ^3.5.0
+resolution: workspace
+
+dependencies:
+  collection: ^1.18.0
+  crypto: ^3.0.6
+  meta: ^1.15.0
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0
