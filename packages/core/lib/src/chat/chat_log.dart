@@ -37,7 +37,9 @@ final class ChatLog {
   void add(ChatLine line) {
     final key = line.isBroadcast
         ? broadcastKey
-        : (line.isLocal ? (line.peerId ?? broadcastKey) : (line.peerId ?? broadcastKey));
+        : (line.isLocal
+            ? (line.peerId ?? broadcastKey)
+            : (line.peerId ?? broadcastKey));
     _threads.putIfAbsent(key, () => []).add(line);
   }
 
@@ -100,5 +102,4 @@ final class ChatLog {
 }
 
 /// Encode plain chat text payload.
-Uint8List encodeChatText(String text) =>
-    Uint8List.fromList(utf8.encode(text));
+Uint8List encodeChatText(String text) => Uint8List.fromList(utf8.encode(text));

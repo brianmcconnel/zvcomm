@@ -37,7 +37,15 @@ const bannedTokens = <String>[
 
 /// Packages we explicitly own / path-depend (no pub license needed).
 const pathPackagePrefixes = <String>[
-  'core', 'ble', 'nfc', 'wifi', 'pki', 'sim', 'ui', 'app', 'cli',
+  'core',
+  'ble',
+  'nfc',
+  'wifi',
+  'pki',
+  'sim',
+  'ui',
+  'app',
+  'cli',
 ];
 
 Future<void> main(List<String> args) async {
@@ -160,13 +168,15 @@ int _scanLicenseNear(String name, String rootUri) {
 int _evaluateLicenseText(String name, String text) {
   // Allow-list first (MPL text mentions GPL as a secondary license option).
   final looksMozilla = text.contains('mozilla public license');
-  final looksMit = text.contains('permission is hereby granted, free of charge') &&
-      text.contains('mit license') ||
-      (text.contains('permission is hereby granted, free of charge') &&
-          text.contains('without restriction'));
+  final looksMit =
+      text.contains('permission is hereby granted, free of charge') &&
+              text.contains('mit license') ||
+          (text.contains('permission is hereby granted, free of charge') &&
+              text.contains('without restriction'));
   final looksApache = text.contains('apache license') && text.contains('2.0');
-  final looksBsd = text.contains('redistribution and use in source and binary') &&
-      text.contains('disclaimer');
+  final looksBsd =
+      text.contains('redistribution and use in source and binary') &&
+          text.contains('disclaimer');
   final looksIsc = text.contains('isc license') ||
       (text.contains('permission to use, copy, modify') &&
           text.contains('and/or distribute'));

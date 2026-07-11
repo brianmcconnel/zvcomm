@@ -78,8 +78,8 @@ final class RouteTable {
     final sameHopsBetterRssi = hopCount == existing.hopCount &&
         rssi != null &&
         (existing.lastRssi == null || rssi > existing.lastRssi!);
-    final refreshSame = hopCount == existing.hopCount &&
-        nextHopId == existing.nextHopId;
+    final refreshSame =
+        hopCount == existing.hopCount && nextHopId == existing.nextHopId;
 
     if (betterHops || sameHopsBetterRssi || refreshSame) {
       _routes[destinationId] = existing.copyWith(
@@ -101,8 +101,8 @@ final class RouteTable {
     required int originalHopLimit,
     int? rssi,
   }) {
-    final hopsFromSource = (originalHopLimit - packetHopLimitRemaining)
-        .clamp(1, 255);
+    final hopsFromSource =
+        (originalHopLimit - packetHopLimitRemaining).clamp(1, 255);
     // Next hop toward source is the neighbor we heard it from.
     learn(
       destinationId: sourceId,

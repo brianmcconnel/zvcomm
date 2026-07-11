@@ -1,7 +1,6 @@
 import '../transport/transport.dart';
 import 'transport_plugin.dart';
 
-
 /// Global registry of [TransportPlugin]s.
 ///
 /// Built-in plugins register at app startup; third-party packages call

@@ -18,8 +18,7 @@ final class BleTransport implements Transport {
   final ble.PeripheralManager? _peripheral;
   final bool _platformReady;
 
-  final StreamController<Peer> _discovery =
-      StreamController<Peer>.broadcast();
+  final StreamController<Peer> _discovery = StreamController<Peer>.broadcast();
   final StreamController<Connection> _inbound =
       StreamController<Connection>.broadcast();
 
@@ -368,16 +367,17 @@ final class BleTransport implements Transport {
       serviceData: (!kIsWeb && (Platform.isIOS || Platform.isMacOS))
           ? const {}
           : {serviceUuid: idBytes},
-      manufacturerSpecificData: (!kIsWeb && (Platform.isIOS || Platform.isMacOS))
-          ? const []
-          : [
-              ble.ManufacturerSpecificData(
-                id: ZvcommProtocol.bleManufacturerId,
-                data: idBytes.length > 20
-                    ? Uint8List.sublistView(idBytes, 0, 20)
-                    : idBytes,
-              ),
-            ],
+      manufacturerSpecificData:
+          (!kIsWeb && (Platform.isIOS || Platform.isMacOS))
+              ? const []
+              : [
+                  ble.ManufacturerSpecificData(
+                    id: ZvcommProtocol.bleManufacturerId,
+                    data: idBytes.length > 20
+                        ? Uint8List.sublistView(idBytes, 0, 20)
+                        : idBytes,
+                  ),
+                ],
     );
 
     await peripheral.startAdvertising(advertisement);

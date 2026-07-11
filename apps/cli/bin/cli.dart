@@ -13,7 +13,8 @@ Future<void> main(List<String> arguments) async {
     ..addCommand(
       'identity',
       ArgParser()
-        ..addOption('name', abbr: 'n', defaultsTo: 'device', help: 'Display name')
+        ..addOption('name',
+            abbr: 'n', defaultsTo: 'device', help: 'Display name')
         ..addOption('seed', abbr: 's', help: 'Deterministic seed (tests only)')
         ..addOption('out', help: 'Write identity JSON (includes private keys)'),
     )
@@ -207,8 +208,7 @@ Future<void> _cmdEnroll(ArgResults cmd) async {
   final resp = await svc.processRequest(req);
   final cert = MeshCertificate.fromJsonString(resp.certificateJson);
   final outCert = cmd['out-cert'] as String?;
-  final certText =
-      const JsonEncoder.withIndent('  ').convert(cert.toJson());
+  final certText = const JsonEncoder.withIndent('  ').convert(cert.toJson());
   if (outCert != null) {
     await File(outCert).writeAsString(certText);
   }
@@ -220,10 +220,10 @@ Future<void> _cmdEnroll(ArgResults cmd) async {
 }
 
 Future<void> _cmdNoiseDemo(ArgResults cmd) async {
-  final alice =
-      await DeviceIdentity.fromSeed(cmd['alice-seed'] as String, displayName: 'Alice');
-  final bob =
-      await DeviceIdentity.fromSeed(cmd['bob-seed'] as String, displayName: 'Bob');
+  final alice = await DeviceIdentity.fromSeed(cmd['alice-seed'] as String,
+      displayName: 'Alice');
+  final bob = await DeviceIdentity.fromSeed(cmd['bob-seed'] as String,
+      displayName: 'Bob');
 
   final hsA = Handshake(alice);
   final init = await hsA.createInitiation();

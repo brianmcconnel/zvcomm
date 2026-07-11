@@ -26,7 +26,8 @@ class PeersScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Local identity', style: Theme.of(context).textTheme.labelLarge),
+                Text('Local identity',
+                    style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 4),
                 Text(
                   id?.displayName ?? '…',

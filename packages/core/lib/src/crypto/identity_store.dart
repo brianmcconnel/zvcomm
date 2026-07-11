@@ -46,14 +46,14 @@ final class FileIdentityStore implements IdentityStore {
 
   FileIdentityStore(this.file);
 
-  factory FileIdentityStore.path(String path) =>
-      FileIdentityStore(File(path));
+  factory FileIdentityStore.path(String path) => FileIdentityStore(File(path));
 
   @override
   Future<void> save(StoredIdentity value) async {
     final map = {
       'identity': value.identity.toJson(includePrivate: true),
-      if (value.certificateJson != null) 'certificateJson': value.certificateJson,
+      if (value.certificateJson != null)
+        'certificateJson': value.certificateJson,
       if (value.certificateBytes != null)
         'certificateBytes': base64Url.encode(value.certificateBytes!),
     };

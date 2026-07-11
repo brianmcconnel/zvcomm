@@ -4,7 +4,7 @@
 
 | Workflow | File | Purpose |
 |----------|------|---------|
-| **CI** | `.github/workflows/ci.yml` | Format, analyze, unit/widget tests, license gate |
+| **CI** | `.github/workflows/ci.yml` | Format, analyze, unit/widget tests, license gate (`flutter pub get` only; no melos bootstrap) |
 | **Build** | `.github/workflows/build.yml` | Release binaries for all platforms + upload artifacts |
 
 ## When builds run

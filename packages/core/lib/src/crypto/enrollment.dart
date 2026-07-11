@@ -91,8 +91,7 @@ final class EnrollmentRequest {
     );
   }
 
-  Uint8List toBytes() =>
-      Uint8List.fromList(utf8.encode(jsonEncode(toJson())));
+  Uint8List toBytes() => Uint8List.fromList(utf8.encode(jsonEncode(toJson())));
 
   factory EnrollmentRequest.fromBytes(Uint8List bytes) =>
       EnrollmentRequest.fromJson(
@@ -148,8 +147,7 @@ final class EnrollmentResponse {
     );
   }
 
-  Uint8List toBytes() =>
-      Uint8List.fromList(utf8.encode(jsonEncode(toJson())));
+  Uint8List toBytes() => Uint8List.fromList(utf8.encode(jsonEncode(toJson())));
 
   factory EnrollmentResponse.fromBytes(Uint8List bytes) =>
       EnrollmentResponse.fromJson(

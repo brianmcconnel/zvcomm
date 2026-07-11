@@ -250,7 +250,8 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
           .join(', ');
       status =
           'Scanning: ${active.isEmpty ? "none" : active}${useMockDemo ? " + mock" : ""}';
-      chat.addSystem('Mesh started (${transportManager?.transports.length ?? 0} transports)');
+      chat.addSystem(
+          'Mesh started (${transportManager?.transports.length ?? 0} transports)');
     } catch (e) {
       running = true;
       status = 'Mesh started (some transports unavailable)';

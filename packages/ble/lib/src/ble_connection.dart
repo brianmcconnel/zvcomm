@@ -55,7 +55,8 @@ final class BleConnection implements Connection {
 
   /// Feed ATT-layer bytes (may be a partial length-prefixed frame).
   void deliverChunk(Uint8List chunk) {
-    if (_state != ConnectionState.open && _state != ConnectionState.connecting) {
+    if (_state != ConnectionState.open &&
+        _state != ConnectionState.connecting) {
       return;
     }
     try {

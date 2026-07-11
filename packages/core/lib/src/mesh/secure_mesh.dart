@@ -140,6 +140,5 @@ final class SecureMesh {
     }
   }
 
-  String _id() =>
-      DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+  String _id() => DateTime.now().microsecondsSinceEpoch.toRadixString(16);
 }

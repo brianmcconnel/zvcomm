@@ -63,8 +63,8 @@ final class MeshCertificate {
       signature: Uint8List.fromList(
         base64Url.decode(json['signature']! as String),
       ),
-      capabilities: (json['capabilities'] as List<dynamic>? ?? const [])
-          .cast<String>(),
+      capabilities:
+          (json['capabilities'] as List<dynamic>? ?? const []).cast<String>(),
       serial: json['serial'] as int? ?? 1,
     );
   }

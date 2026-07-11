@@ -83,7 +83,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: ChoiceChip(
                       label: Text(
-                        p.displayName.isEmpty ? p.id.substring(0, 6) : p.displayName,
+                        p.displayName.isEmpty
+                            ? p.id.substring(0, 6)
+                            : p.displayName,
                       ),
                       selected: peerId == p.id,
                       onSelected: (_) => setState(() => mesh.selectPeer(p.id)),

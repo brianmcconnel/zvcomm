@@ -81,11 +81,15 @@ dart run apps/cli/bin/cli.dart noise-demo
 cd apps/app && flutter run -d linux   # or chrome, windows, macos, …
 ```
 
-### Melos (optional)
+### Melos scripts (optional)
+
+Dependencies use **Dart pub workspaces** (`flutter pub get` at the repo root).
+Do **not** run `melos bootstrap` — it writes `pubspec_overrides.yaml` that conflict
+with `resolution: workspace`.
 
 ```bash
 dart pub global activate melos
-melos bootstrap
+melos run get          # flutter pub get
 melos run test:core
 melos run license:check
 ```

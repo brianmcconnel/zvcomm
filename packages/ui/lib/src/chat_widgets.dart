@@ -58,7 +58,8 @@ class ChatBubble extends StatelessWidget {
 
     final scheme = Theme.of(context).colorScheme;
     final align = line.isLocal ? Alignment.centerRight : Alignment.centerLeft;
-    final bg = line.isLocal ? scheme.primaryContainer : scheme.surfaceContainerHighest;
+    final bg =
+        line.isLocal ? scheme.primaryContainer : scheme.surfaceContainerHighest;
     final fg = line.isLocal ? scheme.onPrimaryContainer : scheme.onSurface;
 
     return Align(

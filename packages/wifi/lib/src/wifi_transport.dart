@@ -18,8 +18,7 @@ final class WifiTransport implements Transport {
   FlutterP2pHost? _host;
   FlutterP2pClient? _client;
 
-  final StreamController<Peer> _discovery =
-      StreamController<Peer>.broadcast();
+  final StreamController<Peer> _discovery = StreamController<Peer>.broadcast();
   final StreamController<Connection> _inbound =
       StreamController<Connection>.broadcast();
 
@@ -49,7 +48,8 @@ final class WifiTransport implements Transport {
 
   @override
   Stream<Connection> get incomingConnections => Stream.multi((controller) {
-        final a = _inbound.stream.listen(controller.add, onError: controller.addError);
+        final a = _inbound.stream
+            .listen(controller.add, onError: controller.addError);
         final b = _lan.incomingConnections
             .listen(controller.add, onError: controller.addError);
         controller.onCancel = () async {

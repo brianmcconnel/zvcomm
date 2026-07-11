@@ -1,45 +1,51 @@
 name: zvcomm
-repository: https://github.com/zvcomm/zvcomm
+repository: https://github.com/brianmcconnel/zvcomm
 
+# Package discovery for optional melos scripts. Dependency resolution uses
+# Dart pub workspaces (root pubspec.yaml `workspace:` + `resolution: workspace`).
+# Do NOT run `melos bootstrap` — it generates pubspec_overrides.yaml that conflict
+# with workspace packages ("Cannot override workspace packages").
 packages:
   - packages/**
   - apps/**
 
-command:
-  bootstrap:
-    environment:
-      sdk: ^3.5.0
-    dependencies:
-      # Shared dependency constraints can go here
-    dev_dependencies:
-      lints: ^5.0.0
-      test: ^1.25.0
-
 scripts:
+  get:
+    run: flutter pub get
+    description: Resolve monorepo deps via pub workspace (not melos bootstrap)
+
   analyze:
-    run: melos exec -- dart analyze --fatal-infos
-    description: Run analyzer on all packages
+    run: |
+      dart analyze --fatal-infos packages/core packages/pki packages/sim apps/cli
+      (cd packages/ble && flutter analyze --fatal-infos)
+      (cd packages/nfc && flutter analyze --fatal-infos)
+      (cd packages/wifi && flutter analyze --fatal-infos)
+      (cd packages/ui && flutter analyze --fatal-infos)
+      (cd apps/app && flutter analyze --fatal-infos)
+    description: Analyze all packages
 
   test:
-    run: melos exec --fail-fast --dir-exists=test -- dart test
-    description: Run tests in all packages
+    run: |
+      dart test packages/core packages/pki packages/sim apps/cli
+      (cd packages/ble && flutter test)
+      (cd packages/nfc && flutter test)
+      (cd packages/wifi && flutter test)
+      (cd packages/ui && flutter test)
+      (cd apps/app && flutter test)
+    description: Run all package tests
 
   test:core:
-    run: cd packages/core && dart test
+    run: dart test packages/core
     description: Run core package tests only
 
   format:
-    run: melos exec -- dart format .
+    run: dart format .
     description: Format all Dart code
 
   format:check:
-    run: melos exec -- dart format --set-exit-if-changed .
+    run: dart format --set-exit-if-changed .
     description: Check formatting
 
   license:check:
     run: dart run tool/license_check.dart
     description: Verify all dependencies use permissive licenses only
-
-  get:
-    run: melos bootstrap
-    description: Bootstrap workspace dependencies

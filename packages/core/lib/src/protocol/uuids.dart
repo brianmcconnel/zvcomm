@@ -4,8 +4,7 @@
 /// Wi-Fi SoftAP fallback uses the UDP discovery magic + TCP port.
 abstract final class ZvcommProtocol {
   /// Primary mesh GATT service.
-  static const String bleServiceUuid =
-      '6b7a0001-5e2d-4f3a-9c1b-8d4e2f0a1b2c';
+  static const String bleServiceUuid = '6b7a0001-5e2d-4f3a-9c1b-8d4e2f0a1b2c';
 
   /// Central → peripheral data (write / write-without-response).
   static const String bleRxCharacteristicUuid =

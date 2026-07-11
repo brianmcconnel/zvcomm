@@ -37,8 +37,7 @@ final class MeshPacket {
     this.flags = 0,
   });
 
-  bool get isBroadcast =>
-      destinationId == null || destinationId!.isEmpty;
+  bool get isBroadcast => destinationId == null || destinationId!.isEmpty;
 
   MeshPacket decrementHop() => MeshPacket(
         messageId: messageId,

@@ -324,7 +324,8 @@ void main() {
       final sessionA = await hsA.finish(accepted.response);
       final sessionB = accepted.session;
 
-      final cipher = await sessionA.seal(Uint8List.fromList(utf8.encode('ping')));
+      final cipher =
+          await sessionA.seal(Uint8List.fromList(utf8.encode('ping')));
       final clear = await sessionB.open(cipher);
       expect(utf8.decode(clear), 'ping');
 
@@ -364,7 +365,8 @@ void main() {
       expect(ids, contains('builtin.uwb.stub'));
       expect(ids, contains('builtin.lora.stub'));
       // UWB priority 80 > hardware 30
-      final uwb = registry.plugins.indexWhere((p) => p.id == 'builtin.uwb.stub');
+      final uwb =
+          registry.plugins.indexWhere((p) => p.id == 'builtin.uwb.stub');
       final hw = registry.plugins.indexWhere(
         (p) => p.id == BuiltinCorePlugins.hardwareAdapterId,
       );

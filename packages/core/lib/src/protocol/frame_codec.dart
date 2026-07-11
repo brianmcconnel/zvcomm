@@ -46,8 +46,7 @@ final class StreamFrameCodec {
       if (bytes.length < headerSize) {
         break;
       }
-      final length =
-          ByteData.sublistView(bytes).getUint32(0, Endian.big);
+      final length = ByteData.sublistView(bytes).getUint32(0, Endian.big);
       if (length > maxFrameBytes) {
         _buffer.clear();
         throw FormatException('frame length $length exceeds max');

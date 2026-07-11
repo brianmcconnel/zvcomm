@@ -8,7 +8,8 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 .melos_tool/
-pubspec_overrides.yaml
+# Melos-generated; must not exist with Dart pub workspaces
+**/pubspec_overrides.yaml
 *.iml
 *.ipr
 *.iws

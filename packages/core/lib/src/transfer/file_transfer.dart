@@ -71,8 +71,8 @@ final class FileTransferService {
 
   final StreamController<FileTransferProgress> _progress =
       StreamController<FileTransferProgress>.broadcast();
-  final StreamController<({FileTransferInfo info, Uint8List bytes})> _completed =
-      StreamController.broadcast();
+  final StreamController<({FileTransferInfo info, Uint8List bytes})>
+      _completed = StreamController.broadcast();
 
   final Map<String, _IncomingAssembly> _incoming = {};
   StreamSubscription<MeshMessage>? _sub;
@@ -138,9 +138,8 @@ final class FileTransferService {
 
     for (var i = 0; i < totalChunks; i++) {
       final start = i * chunkSize;
-      final end = (start + chunkSize > bytes.length)
-          ? bytes.length
-          : start + chunkSize;
+      final end =
+          (start + chunkSize > bytes.length) ? bytes.length : start + chunkSize;
       final slice = bytes.isEmpty
           ? Uint8List(0)
           : Uint8List.sublistView(bytes, start, end);
@@ -344,8 +343,7 @@ final class _IncomingAssembly {
     chunks[index] = data;
   }
 
-  int get bytesReceived =>
-      chunks.values.fold<int>(0, (a, b) => a + b.length);
+  int get bytesReceived => chunks.values.fold<int>(0, (a, b) => a + b.length);
 
   Uint8List assemble() {
     final out = BytesBuilder(copy: false);

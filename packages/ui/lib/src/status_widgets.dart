@@ -38,7 +38,8 @@ class TransportStatusBar extends StatelessWidget {
     );
   }
 
-  Widget _chip(BuildContext context, {required String label, required bool on}) {
+  Widget _chip(BuildContext context,
+      {required String label, required bool on}) {
     final scheme = Theme.of(context).colorScheme;
     return Chip(
       avatar: Icon(

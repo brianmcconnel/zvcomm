@@ -14,8 +14,7 @@ import 'nfc_payload.dart';
 /// Continuous discovery runs an NFC reader session; each NDEF tag with a
 /// ZVComm record is reported as a [Peer]. Optional write carries local identity.
 final class NfcTransport implements Transport, ConnectionlessSend {
-  final StreamController<Peer> _discovery =
-      StreamController<Peer>.broadcast();
+  final StreamController<Peer> _discovery = StreamController<Peer>.broadcast();
   final StreamController<Connection> _inbound =
       StreamController<Connection>.broadcast();
 

@@ -22,8 +22,7 @@ final class AdapterTransport implements Transport {
   final String remotePeerId;
   final String remoteDisplayName;
 
-  final StreamController<Peer> _discovery =
-      StreamController<Peer>.broadcast();
+  final StreamController<Peer> _discovery = StreamController<Peer>.broadcast();
   final StreamController<Connection> _inbound =
       StreamController<Connection>.broadcast();
 

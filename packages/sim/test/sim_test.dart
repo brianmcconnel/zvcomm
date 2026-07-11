@@ -28,7 +28,8 @@ void main() {
   });
 
   test('grid scenario has high delivery under no loss', () async {
-    final scenario = SimScenario.grid(rows: 3, cols: 3, spacing: 20, rangeMeters: 30);
+    final scenario =
+        SimScenario.grid(rows: 3, cols: 3, spacing: 20, rangeMeters: 30);
     final result = await MeshSimulator().run(
       scenario,
       options: const SimRunOptions(
@@ -51,7 +52,8 @@ void main() {
       ),
     );
     // Lossy should not deliver more than clean (probabilistic; allow equal).
-    expect(lossy.messagesDelivered, lessThanOrEqualTo(clean.messagesDelivered + 1));
+    expect(lossy.messagesDelivered,
+        lessThanOrEqualTo(clean.messagesDelivered + 1));
   });
 
   test('scale line of 40 nodes completes', () async {

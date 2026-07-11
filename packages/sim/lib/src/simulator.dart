@@ -37,8 +37,7 @@ final class SimResult {
   });
 
   @override
-  String toString() =>
-      'SimResult(scenario=$scenarioName, nodes=$nodeCount, '
+  String toString() => 'SimResult(scenario=$scenarioName, nodes=$nodeCount, '
       'sent=$messagesSent, delivered=$messagesDelivered, '
       'ratio=${deliveryRatio.toStringAsFixed(2)}, '
       'avgHops=${avgHopCount?.toStringAsFixed(2)}, '
@@ -187,8 +186,7 @@ final class MeshSimulator {
       final uniqueReached = deliveries.entries
           .where((e) => e.key != originId && e.value > 0)
           .length;
-      final expected =
-          (scenario.nodes.length - 1) * opts.broadcastCount;
+      final expected = (scenario.nodes.length - 1) * opts.broadcastCount;
       final ratio = expected == 0 ? 0.0 : deliveredToOthers / expected;
 
       final agg = <String, int>{};

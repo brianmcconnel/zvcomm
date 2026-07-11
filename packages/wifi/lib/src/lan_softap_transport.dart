@@ -11,8 +11,7 @@ import 'package:core/core.dart';
 /// Not a true SoftAP radio stack — it binds a TCP server and announces via
 /// UDP broadcast so peers on the same L2/L3 segment can mesh.
 final class LanSoftApTransport implements Transport {
-  final StreamController<Peer> _discovery =
-      StreamController<Peer>.broadcast();
+  final StreamController<Peer> _discovery = StreamController<Peer>.broadcast();
   final StreamController<Connection> _inbound =
       StreamController<Connection>.broadcast();
 
@@ -161,7 +160,8 @@ final class LanSoftApTransport implements Transport {
       final name = parts[2];
       final port = int.tryParse(parts[3]) ?? tcpPort;
       final host = dg.address.address;
-      _seen[id] = _DiscoveredLanPeer(id: id, name: name, host: host, port: port);
+      _seen[id] =
+          _DiscoveredLanPeer(id: id, name: name, host: host, port: port);
       final peer = Peer(
         id: id,
         displayName: name,
@@ -177,8 +177,7 @@ final class LanSoftApTransport implements Transport {
   }
 
   void _onInboundSocket(Socket socket) {
-    final remote =
-        '${socket.remoteAddress.address}:${socket.remotePort}';
+    final remote = '${socket.remoteAddress.address}:${socket.remotePort}';
     final peer = Peer(
       id: remote,
       displayName: '',

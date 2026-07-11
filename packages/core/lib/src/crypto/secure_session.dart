@@ -202,8 +202,7 @@ final class Handshake {
     Future<List<int>> dh(SimpleKeyPair localPair, Uint8List remotePub) async {
       final secret = await _x25519.sharedSecretKey(
         keyPair: localPair,
-        remotePublicKey:
-            SimplePublicKey(remotePub, type: KeyPairType.x25519),
+        remotePublicKey: SimplePublicKey(remotePub, type: KeyPairType.x25519),
       );
       return secret.extractBytes();
     }
@@ -360,7 +359,8 @@ final class SessionManager {
   }
 
   /// Handle inbound handshake / return optional reply + completed remote id.
-  Future<({Uint8List? reply, String? establishedPeerId})> handleHandshakeMessage(
+  Future<({Uint8List? reply, String? establishedPeerId})>
+      handleHandshakeMessage(
     Uint8List frame,
   ) async {
     if (frame.length < 2) {

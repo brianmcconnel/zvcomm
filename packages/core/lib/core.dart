@@ -34,4 +34,3 @@ export 'src/transfer/file_transfer.dart';
 export 'src/chat/chat_log.dart';
 export 'src/protocol/uuids.dart';
 export 'src/protocol/frame_codec.dart';
-

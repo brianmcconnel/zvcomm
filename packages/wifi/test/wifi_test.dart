@@ -31,8 +31,8 @@ void main() {
     expect(peers.any((p) => p.id == 'lan-b'), isTrue);
 
     final bPeer = peers.firstWhere((p) => p.id == 'lan-b');
-    final inbound = b.incomingConnections.first
-        .timeout(const Duration(seconds: 3));
+    final inbound =
+        b.incomingConnections.first.timeout(const Duration(seconds: 3));
 
     final conn = await a.connect(bPeer);
     final remote = await inbound;

@@ -206,9 +206,8 @@ final class MeshNode {
 
   /// Originating send: encapsulate and route/flood.
   Future<void> send(MeshMessage message) async {
-    final hopLimit = message.hopLimit > 0
-        ? message.hopLimit
-        : config.defaultHopLimit;
+    final hopLimit =
+        message.hopLimit > 0 ? message.hopLimit : config.defaultHopLimit;
     final packet = MeshPacket(
       messageId: message.id,
       sourceId: message.sourceId ?? localId,
