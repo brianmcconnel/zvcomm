@@ -46,6 +46,7 @@ The **Build** workflow attaches all artifacts to a GitHub Release with generated
 ## Notes
 
 - **Windows / macOS / iOS** jobs use GitHub-hosted runners (not WSL).
+- **macOS / iOS / CLI-mac** use pinned `macos-15` (not `macos-latest`, which is moving to macOS 26).
 - **Windows** defines `_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS` in `apps/app/windows/CMakeLists.txt` so VS 18 MSVC accepts plugins that still use `<experimental/coroutine>` (BLE / permission_handler).
 - **CLI** jobs install Flutter (not Dart-only) so the monorepo workspace can resolve `apps/app`.
 - **Android** APKs are **debug-signed by Flutter’s default debug/upload keystore** for CI unless you add signing secrets.

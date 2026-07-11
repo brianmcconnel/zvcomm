@@ -142,7 +142,8 @@ jobs:
   macos:
     name: macOS desktop
     needs: meta
-    runs-on: macos-latest
+    # Pin OS image (avoid macos-latest → macOS 26 migration surprises).
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
 
