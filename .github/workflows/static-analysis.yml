@@ -1,4 +1,5 @@
-# Static analysis: Dart analyzer, format, license gate, secrets (gitleaks), CodeQL.
+# Static analysis: Dart analyzer, format, license gate, secrets (gitleaks),
+# CodeQL on GitHub Actions workflows (CodeQL has no Dart language pack).
 name: Static analysis
 
 on:
@@ -7,7 +8,6 @@ on:
   pull_request:
     branches: [main, master]
   schedule:
-    # Weekly security re-scan
     - cron: '17 6 * * 1'
   workflow_dispatch:
 
@@ -61,29 +61,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      # v3 = Node 24 runtime
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
 
-  codeql:
-    name: CodeQL
+  # CodeQL does not support Dart (no language pack). Scan workflow YAML instead.
+  codeql-actions:
+    name: CodeQL (GitHub Actions)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
-          languages: dart
-          # Security + quality for Dart monorepo
+          languages: actions
           queries: security-and-quality
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
-          category: "/language:dart"
+          category: "/language:actions"

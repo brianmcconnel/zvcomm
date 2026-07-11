@@ -8,8 +8,12 @@
 | **dart format** | Style gate | yes | Static analysis + CI |
 | **license_check.dart** | Permissive-license allow-list | yes | Static analysis + CI |
 | **gitleaks** | Secrets / credential leak detection | yes (Docker or binary) | Static analysis |
-| **CodeQL** | Semantic security/quality queries (Dart) | GitHub only | Static analysis |
+| **CodeQL** | Security/quality on **GitHub Actions YAML** only | GitHub only | Static analysis |
 | **pub outdated** | Dependency freshness (informational) | yes | local script only |
+
+> **Note:** CodeQL has **no Dart language pack** ([codeql#17447](https://github.com/github/codeql/issues/17447)).
+> Dart/Flutter quality is covered by the analyzer + strict lints; secrets by gitleaks;
+> workflow security by CodeQL `actions`.
 
 ## Run everything locally
 
