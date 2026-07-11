@@ -73,8 +73,10 @@ jobs:
         run: |
           OUT="zvcomm-${{ needs.meta.outputs.version }}-linux-x64"
           mkdir -p "dist/$OUT"
-          cp -a apps/app/build/linux/x64/release/bundle/. "dist/$OUT/"
-          cd dist && tar -czf "${OUT}.tar.gz" "$OUT"
+          BUNDLE=$(find apps/app/build/linux -type d -path '*/release/bundle' | head -1)
+          echo "Bundle: $BUNDLE"
+          cp -a "$BUNDLE"/. "dist/$OUT/"
+          tar -czf "dist/${OUT}.tar.gz" -C dist "$OUT"
           ls -lh "dist/${OUT}.tar.gz"
 
       - uses: actions/upload-artifact@v4
@@ -113,15 +115,18 @@ jobs:
         run: |
           OUT="zvcomm-${{ needs.meta.outputs.version }}-windows-x64"
           mkdir -p "dist/$OUT"
-          # Flutter Windows release output
           if [ -d apps/app/build/windows/x64/runner/Release ]; then
-            cp -a apps/app/build/windows/x64/runner/Release/. "dist/$OUT/"
+            SRC=apps/app/build/windows/x64/runner/Release
+          elif [ -d apps/app/build/windows/runner/Release ]; then
+            SRC=apps/app/build/windows/runner/Release
           else
-            cp -a apps/app/build/windows/runner/Release/. "dist/$OUT/"
+            echo "Windows Release folder not found" >&2
+            find apps/app/build/windows -maxdepth 5 -type d || true
+            exit 1
           fi
-          cd dist
-          7z a -tzip "${OUT}.zip" "$OUT"
-          ls -lh "${OUT}.zip"
+          cp -a "$SRC"/. "dist/$OUT/"
+          (cd dist && 7z a -tzip "${OUT}.zip" "$OUT")
+          ls -lh "dist/${OUT}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -156,13 +161,16 @@ jobs:
         run: |
           OUT="zvcomm-${{ needs.meta.outputs.version }}-macos"
           mkdir -p "dist/$OUT"
-          # .app lives under build/macos/Build/Products/Release/
           APP_PATH=$(find apps/app/build/macos -name '*.app' -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app found under build/macos" >&2
+            find apps/app/build/macos -maxdepth 5 -type d || true
+            exit 1
+          fi
           echo "Found app: $APP_PATH"
           cp -a "$APP_PATH" "dist/$OUT/"
-          cd dist
-          ditto -c -k --sequesterRsrc --keepParent "$OUT" "${OUT}.zip"
-          ls -lh "${OUT}.zip"
+          (cd dist && ditto -c -k --sequesterRsrc --keepParent "$OUT" "${OUT}.zip")
+          ls -lh "dist/${OUT}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -239,6 +247,9 @@ jobs:
           dart pub get
           cd "$APP_DIR" && flutter pub get
 
+      - name: Accept Android licenses
+        run: yes | flutter doctor --android-licenses || true
+
       - name: Build Android APK (split per ABI)
         run: |
           cd "$APP_DIR"
@@ -253,16 +264,16 @@ jobs:
         run: |
           VER="${{ needs.meta.outputs.version }}"
           mkdir -p dist
-          # APKs
+          shopt -s nullglob
           for apk in apps/app/build/app/outputs/flutter-apk/*.apk; do
             base=$(basename "$apk")
             cp "$apk" "dist/zvcomm-${VER}-${base}"
           done
-          # AAB
           for aab in apps/app/build/app/outputs/bundle/release/*.aab; do
             cp "$aab" "dist/zvcomm-${VER}-release.aab"
           done
           ls -lh dist/
+          test -n "$(ls -A dist)"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -299,13 +310,16 @@ jobs:
         run: |
           OUT="zvcomm-${{ needs.meta.outputs.version }}-ios-unsigned"
           mkdir -p "dist/$OUT"
-          # Runner.app under build/ios/iphoneos or similar
           APP_PATH=$(find apps/app/build/ios -name 'Runner.app' -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Runner.app not found under build/ios" >&2
+            find apps/app/build/ios -maxdepth 4 -type d || true
+            exit 1
+          fi
           echo "Found: $APP_PATH"
           cp -a "$APP_PATH" "dist/$OUT/"
-          cd dist
-          ditto -c -k --sequesterRsrc --keepParent "$OUT" "${OUT}.zip"
-          ls -lh "${OUT}.zip"
+          (cd dist && ditto -c -k --sequesterRsrc --keepParent "$OUT" "${OUT}.zip")
+          ls -lh "dist/${OUT}.zip"
 
       - uses: actions/upload-artifact@v4
         with:

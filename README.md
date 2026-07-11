@@ -146,7 +146,7 @@ See [docs/architecture/phase3-security.md](docs/architecture/phase3-security.md)
 - [x] Settings + power modes
 - [x] App lifecycle battery policy (background power-saver)
 - [x] Packaging guide + version 0.4.0
-- [x] CI Linux release build
+- [x] CI multi-platform release builds (Linux, Windows, macOS, Web, Android, iOS, CLI)
 
 See [docs/architecture/phase4-features.md](docs/architecture/phase4-features.md) and [docs/packaging.md](docs/packaging.md).
 

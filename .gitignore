@@ -60,6 +60,9 @@ coverage/
 .env.*
 !.env.example
 
+# Local build outputs
+dist/
+
 # Misc
 *.log
 *.tmp
