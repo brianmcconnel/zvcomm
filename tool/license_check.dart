@@ -158,36 +158,51 @@ int _scanLicenseNear(String name, String rootUri) {
 }
 
 int _evaluateLicenseText(String name, String text) {
-  // Ban check first.
-  for (final banned in bannedTokens) {
-    // Avoid matching "mit" inside longer words; for gpl use word-ish checks.
-    if (banned == 'gpl' || banned == 'lgpl' || banned == 'agpl') {
-      final re = RegExp('\\b$banned(?:v?\\d)?\\b', caseSensitive: false);
-      // Apache license text does not contain gpl as a grant.
-      if (re.hasMatch(text) &&
-          !text.contains('not gpl') &&
-          text.contains('gnu general public')) {
-        stderr.writeln('BANNED: $name appears to use $banned');
-        return 1;
-      }
-      if (text.contains('gnu general public license') ||
-          text.contains('gnu lesser general public') ||
-          text.contains('gnu affero general public')) {
-        stderr.writeln('BANNED: $name appears to use copyleft ($banned family)');
-        return 1;
-      }
-    } else if (text.contains(banned) && banned == 'busl') {
-      stderr.writeln('BANNED: $name appears to use BUSL');
-      return 1;
-    }
+  // Allow-list first (MPL text mentions GPL as a secondary license option).
+  final looksMozilla = text.contains('mozilla public license');
+  final looksMit = text.contains('permission is hereby granted, free of charge') &&
+      text.contains('mit license') ||
+      (text.contains('permission is hereby granted, free of charge') &&
+          text.contains('without restriction'));
+  final looksApache = text.contains('apache license') && text.contains('2.0');
+  final looksBsd = text.contains('redistribution and use in source and binary') &&
+      text.contains('disclaimer');
+  final looksIsc = text.contains('isc license') ||
+      (text.contains('permission to use, copy, modify') &&
+          text.contains('and/or distribute'));
+
+  if (looksMozilla ||
+      looksMit ||
+      looksApache ||
+      looksBsd ||
+      looksIsc ||
+      allowedLicensePatterns.any(text.contains)) {
+    print('OK: $name');
+    return 0;
   }
 
-  final allowed = allowedLicensePatterns.any(text.contains);
-  if (!allowed && text.length > 40) {
-    // Unknown — warn but do not fail hard without stronger signals.
+  // Ban check for non-allowlisted texts.
+  if (text.contains('business source license') || text.contains('busl')) {
+    stderr.writeln('BANNED: $name appears to use BUSL');
+    return 1;
+  }
+  // Primary GPL grant (not mere mention of GPL in dual/secondary license text).
+  final gplPrimary = RegExp(
+    r'this program is free software.*gnu general public license',
+    caseSensitive: false,
+    dotAll: true,
+  );
+  if (gplPrimary.hasMatch(text) ||
+      text.trimLeft().toLowerCase().startsWith('gnu general public license') ||
+      text.contains('gnu lesser general public license') &&
+          !text.contains('mozilla public license') ||
+      text.contains('gnu affero general public license')) {
+    stderr.writeln('BANNED: $name appears to use copyleft (GPL family)');
+    return 1;
+  }
+
+  if (text.length > 40) {
     print('WARN: $name LICENSE not recognized as allow-listed (manual review)');
-  } else if (allowed) {
-    print('OK: $name');
   }
   return 0;
 }

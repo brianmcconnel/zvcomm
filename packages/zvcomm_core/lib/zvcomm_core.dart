@@ -15,3 +15,6 @@ export 'src/mesh/mesh_node.dart';
 export 'src/mesh/flood_router.dart';
 export 'src/mesh/mesh_packet.dart';
 export 'src/crypto/identity.dart';
+export 'src/protocol/uuids.dart';
+export 'src/protocol/frame_codec.dart';
+

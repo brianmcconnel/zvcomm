@@ -9,7 +9,7 @@ Bluetooth LE · NFC · Wi-Fi P2P · pluggable transports · offline-first · per
 | **License** | Apache-2.0 |
 | **Stack** | Flutter + Dart (AOT) |
 | **Platforms** | Android, iOS, Linux, macOS, Windows |
-| **Status** | Phase 0 – Foundation |
+| **Status** | Phase 1 – Transports |
 
 ## Architecture
 
@@ -95,7 +95,18 @@ melos run license:check
 - [x] Simulator skeleton sharing production mesh code
 - [x] PKI skeleton (`LocalCa`, placeholder certs) + CLI
 - [x] License allow-list docs + CI license gate
-- [x] BLE / NFC / Wi-Fi package stubs (Phase 1)
+
+## Phase 1 deliverables
+
+- [x] BLE: central + peripheral via `bluetooth_low_energy` (MIT)
+- [x] NFC: NDEF bootstrap via `nfc_manager` (MIT)
+- [x] Wi-Fi: Android P2P (`flutter_p2p_connection` MIT) + LAN SoftAP fallback
+- [x] Power-mode hooks (scan duty cycle / session control)
+- [x] Android / iOS permissions and manifests
+- [x] App UI transport availability chips
+- [x] Length-prefixed frame codec for MTU-limited links
+
+See [docs/architecture/phase1-transports.md](docs/architecture/phase1-transports.md).
 
 ## Development phases
 

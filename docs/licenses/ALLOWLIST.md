@@ -29,6 +29,20 @@ ZVComm only accepts **permissive** open-source licenses.
 | Commons Clause | Commercial restriction |
 | Proprietary / commercial-only | e.g. some BLE plugins requiring paid licenses |
 
+## Phase 1 transport dependencies (verified)
+
+| Package | License | Use |
+|---------|---------|-----|
+| bluetooth_low_energy (+ platform pkgs) | MIT | BLE central + peripheral |
+| nfc_manager | MIT | NFC session |
+| nfc_manager_ndef | MIT | NDEF read/write |
+| ndef_record | MIT | NDEF records |
+| flutter_p2p_connection | MIT | Android Wi-Fi Direct |
+| permission_handler | MIT | Runtime permissions |
+| network_info_plus | BSD | Optional network info |
+
+**Avoided:** flutter_blue_plus commercial forks, LGPL NFC stacks (libnfc).
+
 ## Process
 
 1. Prefer pure Dart / first-party Apache-2.0 code.

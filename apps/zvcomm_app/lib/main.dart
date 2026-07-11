@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:zvcomm_ble/zvcomm_ble.dart';
 import 'package:zvcomm_core/zvcomm_core.dart';
@@ -28,7 +29,7 @@ class ZvcommApp extends StatelessWidget {
   }
 }
 
-/// Phase 0 home: local identity + discovered peers via mock (and stub) transports.
+/// Phase 1 home: multi-transport discovery (BLE, NFC, Wi-Fi/LAN, optional mock).
 class PeerDiscoveryPage extends StatefulWidget {
   const PeerDiscoveryPage({super.key});
 
@@ -38,31 +39,36 @@ class PeerDiscoveryPage extends StatefulWidget {
 
 class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
   late final DeviceIdentity _identity;
+  late final BleTransport _ble;
+  late final NfcTransport _nfc;
+  late final WifiTransport _wifi;
   late final MockMedium _medium;
   late final MockTransport _mockTransport;
-  late final MeshNode _node;
   late final MockTransport _demoPeerTransport;
+  late final MeshNode _node;
 
   StreamSubscription<Peer>? _peerSub;
   final Map<String, Peer> _peers = {};
+  final Map<TransportKind, bool> _available = {};
   bool _running = false;
+  final bool _useMockDemo = true;
+  TransportPowerMode _powerMode = TransportPowerMode.balanced;
   String? _status;
 
   @override
   void initState() {
     super.initState();
     _identity = DeviceIdentity.generate(displayName: 'This device');
+    _ble = BleTransport();
+    _nfc = NfcTransport();
+    _wifi = WifiTransport();
     _medium = MockMedium();
-
-    // Local node on the mock medium.
     _mockTransport = MockTransport(
       medium: _medium,
       localId: _identity.id,
       displayName: _identity.displayName,
       position: const SimPoint(0, 0),
     );
-
-    // Demo remote peer so the UI is non-empty without a second device.
     _demoPeerTransport = MockTransport(
       medium: _medium,
       localId: 'demo-peer-01',
@@ -74,34 +80,53 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
       localId: _identity.id,
       displayName: _identity.displayName,
       transports: TransportManager([
+        _ble,
+        _nfc,
+        _wifi,
         _mockTransport,
-        BleTransport(),
-        NfcTransport(),
-        WifiTransport(),
       ]),
     );
 
+    unawaited(_probeAvailability());
     unawaited(_start());
+  }
+
+  Future<void> _probeAvailability() async {
+    final results = <TransportKind, bool>{
+      TransportKind.ble: await _ble.isAvailable(),
+      TransportKind.nfc: await _nfc.isAvailable(),
+      TransportKind.wifi: await _wifi.isAvailable(),
+      TransportKind.mock: true,
+    };
+    if (!mounted) return;
+    setState(() => _available.addAll(results));
   }
 
   Future<void> _start() async {
     setState(() => _status = 'Starting discovery…');
-    await _demoPeerTransport.startAdvertising(
-      localId: 'demo-peer-01',
-      displayName: 'Demo Peer',
-      metadata: {'demo': 'true'},
-    );
+    if (_useMockDemo) {
+      await _demoPeerTransport.startAdvertising(
+        localId: 'demo-peer-01',
+        displayName: 'Demo Peer',
+        metadata: {'demo': 'true'},
+      );
+    }
     _peerSub = _node.peerUpdates.listen((peer) {
       if (!mounted) return;
-      setState(() {
-        _peers[peer.id] = peer;
-      });
+      setState(() => _peers[peer.id] = peer);
     });
+    await _node.transports.setPowerMode(_powerMode);
     await _node.start();
     if (!mounted) return;
+    final active = _available.entries
+        .where((e) => e.value)
+        .map((e) => e.key.name.toUpperCase())
+        .join(', ');
     setState(() {
       _running = true;
-      _status = 'Scanning (mock medium + transport stubs)';
+      _status = 'Scanning: ${active.isEmpty ? "none" : active}'
+          '${_useMockDemo ? " + mock demo" : ""}'
+          ' · power=${_powerMode.name}';
     });
   }
 
@@ -125,12 +150,23 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
     }
   }
 
+  Future<void> _cyclePowerMode() async {
+    const modes = TransportPowerMode.values;
+    final next = modes[(_powerMode.index + 1) % modes.length];
+    _powerMode = next;
+    await _node.transports.setPowerMode(next);
+    if (!mounted) return;
+    setState(() {
+      _status = 'Power mode → ${next.name}';
+    });
+  }
+
   @override
   void dispose() {
-    // Cancel discovery timers synchronously so Flutter tests do not see
-    // pending timers after the widget tree is disposed.
+    // Cancel discovery/announce timers before async dispose (widget tests).
     _mockTransport.cancelDiscoverySync();
     _demoPeerTransport.cancelDiscoverySync();
+    _wifi.cancelTimersSync();
     unawaited(_peerSub?.cancel());
     unawaited(_node.dispose());
     unawaited(_demoPeerTransport.dispose());
@@ -146,9 +182,16 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
         title: const Text('ZVComm'),
         actions: [
           IconButton(
+            tooltip: 'Cycle power mode',
+            onPressed: _cyclePowerMode,
+            icon: const Icon(Icons.battery_saver_outlined),
+          ),
+          IconButton(
             tooltip: _running ? 'Stop discovery' : 'Start discovery',
             onPressed: _toggle,
-            icon: Icon(_running ? Icons.stop_circle_outlined : Icons.play_circle_outline),
+            icon: Icon(
+              _running ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+            ),
           ),
         ],
       ),
@@ -175,6 +218,29 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
                     _identity.id,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _TransportChip(
+                        label: 'BLE',
+                        available: _available[TransportKind.ble] ?? false,
+                      ),
+                      _TransportChip(
+                        label: 'NFC',
+                        available: _available[TransportKind.nfc] ?? false,
+                      ),
+                      _TransportChip(
+                        label: 'Wi-Fi',
+                        available: _available[TransportKind.wifi] ?? false,
+                      ),
+                      _TransportChip(
+                        label: 'Mock',
+                        available: true,
+                      ),
+                    ],
+                  ),
                   if (_status != null) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -184,6 +250,11 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
                           ),
                     ),
                   ],
+                  if (kIsWeb)
+                    Text(
+                      'Web build: radio transports unavailable; mock only.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                 ],
               ),
             ),
@@ -199,18 +270,48 @@ class _PeerDiscoveryPageState extends State<PeerDiscoveryPage> {
             child: PeerListView(
               peers: peerList,
               emptyMessage: _running
-                  ? 'Listening on mock transport…\nBLE / NFC / Wi-Fi stubs are unavailable until Phase 1.'
+                  ? 'Listening for peers…\n'
+                      'BLE / NFC need hardware; Wi-Fi uses Direct (Android) or LAN SoftAP fallback.'
                   : 'Discovery stopped',
               onPeerTap: (peer) {
+                final transports =
+                    peer.transports.map((t) => t.name).join(', ');
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Selected ${peer.displayName.isEmpty ? peer.id : peer.displayName}'),
+                    content: Text(
+                      '${peer.displayName.isEmpty ? peer.id : peer.displayName}'
+                      ' · $transports',
+                    ),
                   ),
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TransportChip extends StatelessWidget {
+  final String label;
+  final bool available;
+
+  const _TransportChip({required this.label, required this.available});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Chip(
+      avatar: Icon(
+        available ? Icons.check_circle : Icons.cancel,
+        size: 18,
+        color: available ? scheme.primary : scheme.outline,
+      ),
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
+      side: BorderSide(
+        color: available ? scheme.primary : scheme.outlineVariant,
       ),
     );
   }

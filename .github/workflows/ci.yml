@@ -33,15 +33,19 @@ jobs:
       - name: Analyze
         run: dart pub global run melos exec -- dart analyze --fatal-infos
 
-      - name: Test packages
+      - name: Test pure-Dart packages
         run: |
           dart test packages/zvcomm_core
-          dart test packages/zvcomm_ble
-          dart test packages/zvcomm_nfc
-          dart test packages/zvcomm_wifi
           dart test packages/zvcomm_pki
           dart test packages/zvcomm_sim
           dart test apps/zvcomm_cli
+
+      - name: Test Flutter transport packages
+        run: |
+          cd packages/zvcomm_ble && flutter test
+          cd ../../packages/zvcomm_nfc && flutter test
+          cd ../../packages/zvcomm_wifi && flutter test
+          cd ../../packages/zvcomm_ui && flutter test
 
       - name: License gate
         run: dart run tool/license_check.dart

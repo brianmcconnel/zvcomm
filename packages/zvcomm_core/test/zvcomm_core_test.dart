@@ -202,6 +202,42 @@ void main() {
     });
   });
 
+  group('StreamFrameCodec', () {
+    test('round-trips a payload', () {
+      final payload = Uint8List.fromList(List.generate(50, (i) => i));
+      final encoded = StreamFrameCodec.encode(payload);
+      final codec = StreamFrameCodec();
+      final frames = codec.add(encoded);
+      expect(frames, hasLength(1));
+      expect(frames.first, payload);
+    });
+
+    test('reassembles across chunks', () {
+      final payload = Uint8List.fromList(utf8.encode('chunked mesh frame'));
+      final encoded = StreamFrameCodec.encode(payload);
+      final codec = StreamFrameCodec();
+      expect(codec.add(Uint8List.sublistView(encoded, 0, 3)), isEmpty);
+      expect(codec.add(Uint8List.sublistView(encoded, 3, 10)), isEmpty);
+      final frames = codec.add(Uint8List.sublistView(encoded, 10));
+      expect(frames, hasLength(1));
+      expect(utf8.decode(frames.first), 'chunked mesh frame');
+    });
+
+    test('chunk splits large frames', () {
+      final big = Uint8List(100);
+      final frame = StreamFrameCodec.encode(big);
+      final parts = StreamFrameCodec.chunk(frame, 20);
+      expect(parts.length, greaterThan(1));
+      final codec = StreamFrameCodec();
+      final out = <Uint8List>[];
+      for (final p in parts) {
+        out.addAll(codec.add(p));
+      }
+      expect(out, hasLength(1));
+      expect(out.first.length, 100);
+    });
+  });
+
   group('TransportManager', () {
     test('merges peer sightings', () async {
       final medium = MockMedium();

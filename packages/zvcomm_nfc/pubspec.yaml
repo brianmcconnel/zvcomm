@@ -1,16 +1,27 @@
 name: zvcomm_nfc
-description: NFC transport for ZVComm (pairing / bootstrap and short payloads).
+description: NFC transport for ZVComm pairing / bootstrap (MIT plugins).
 version: 0.1.0
 publish_to: none
 
 environment:
   sdk: ^3.5.0
+  flutter: '>=3.22.0'
 resolution: workspace
 
 dependencies:
+  flutter:
+    sdk: flutter
   zvcomm_core:
     path: ../zvcomm_core
+  nfc_manager: ^4.0.0
+  nfc_manager_ndef: ^1.1.0
+  ndef_record: ^1.4.0
 
 dev_dependencies:
-  lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
   test: ^1.25.0
+
+flutter:
+  uses-material-design: false

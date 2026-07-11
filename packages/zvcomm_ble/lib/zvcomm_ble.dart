@@ -1,7 +1,8 @@
 /// Bluetooth LE transport adapter for ZVComm.
 ///
-/// Phase 1 will implement discovery and GATT via platform channels or a
-/// fully permissive plugin. Phase 0 ships a stub that reports unavailable.
+/// Uses [bluetooth_low_energy] (MIT) for central scanning/connect and
+/// peripheral advertising/GATT server on supported platforms.
 library;
 
 export 'src/ble_transport.dart';
+export 'src/ble_connection.dart';
