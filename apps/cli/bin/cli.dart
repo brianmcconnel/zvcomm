@@ -109,6 +109,17 @@ Future<void> main(List<String> arguments) async {
           help: 'Emit JSON lines for events',
         ),
     )
+    ..addCommand(
+      'cred',
+      ArgParser()
+        ..addOption('seed', defaultsTo: 'device')
+        ..addOption('name', defaultsTo: 'device')
+        ..addOption(
+          'import',
+          help: 'Verify/import a QR payload or JSON credential',
+        )
+        ..addOption('out', help: 'Write QR payload to file'),
+    )
     ..addCommand('version', ArgParser());
 
   ArgResults results;
@@ -145,6 +156,8 @@ Future<void> main(List<String> arguments) async {
       await _cmdHub(results.command!);
     case 'mesh-node':
       await _cmdMeshNode(results.command!);
+    case 'cred':
+      await _cmdCred(results.command!);
     default:
       _usage(parser);
       exitCode = 64;
@@ -164,6 +177,7 @@ Commands:
   sim         In-process mesh simulation
   hub         TCP radio hub for multi-process / Docker sims
   mesh-node   Join hub as a MeshNode client
+  cred        Export/import QR + short-code public credentials
   version
 
 ${parser.usage}
@@ -515,4 +529,38 @@ Future<void> _cmdMeshNode(ArgResults cmd) async {
   await node.dispose();
   await transport.dispose();
   emit({'event': 'stopped', 'node': id});
+}
+
+Future<void> _cmdCred(ArgResults cmd) async {
+  final importPayload = cmd['import'] as String?;
+  if (importPayload != null) {
+    final cred = PublicCredential.parse(importPayload);
+    final ok = await cred.verify();
+    stdout.writeln(const JsonEncoder.withIndent('  ').convert({
+      'ok': ok,
+      'subjectId': cred.subjectId,
+      'displayName': cred.displayName,
+      'shortCode': cred.shortCode,
+      'issuedAt': cred.issuedAt.toIso8601String(),
+    }));
+    if (!ok) exitCode = 1;
+    return;
+  }
+
+  final id = await DeviceIdentity.fromSeed(
+    cmd['seed'] as String,
+    displayName: cmd['name'] as String,
+  );
+  final cred = await PublicCredential.fromIdentity(id);
+  final payload = cred.toQrPayload();
+  final out = cmd['out'] as String?;
+  if (out != null) {
+    await File(out).writeAsString(payload);
+  }
+  stdout.writeln(const JsonEncoder.withIndent('  ').convert({
+    'subjectId': cred.subjectId,
+    'displayName': cred.displayName,
+    'shortCode': cred.shortCode,
+    'qrPayload': payload,
+  }));
 }

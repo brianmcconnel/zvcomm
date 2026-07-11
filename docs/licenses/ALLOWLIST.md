@@ -42,6 +42,7 @@ ZVComm only accepts **permissive** open-source licenses.
 | network_info_plus | BSD | Optional network info |
 | cryptography | Apache-2.0 | X25519, Ed25519, ChaCha20-Poly1305, HKDF |
 | censor_it | MIT | Chat profanity filter (before encrypt / after decrypt) |
+| qr_flutter (+ qr) | BSD / MIT | Credential share QR rendering |
 
 **Avoided:** flutter_blue_plus commercial forks, LGPL NFC stacks (libnfc).
 

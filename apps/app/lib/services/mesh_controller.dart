@@ -32,6 +32,15 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
   /// Live transports created from plugins (for hot enable/disable).
   final Map<String, Transport> pluginTransports = {};
 
+  /// Credentials imported via QR / short code / mesh offer.
+  final Map<String, PublicCredential> trustedCredentials = {};
+
+  /// Transient mesh offers keyed by short code.
+  final CredentialOfferCache offerCache = CredentialOfferCache();
+
+  /// Cached local share payload (QR + short code).
+  PublicCredential? localCredential;
+
   StreamSubscription<Peer>? _peerSub;
   StreamSubscription<MeshMessage>? _msgSub;
   StreamSubscription<PresenceInfo>? _presenceSub;
@@ -110,8 +119,14 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
       if (m.kind == MessageKind.chat) {
         chat.addRemoteChat(m);
         notifyListeners();
+      } else if (m.kind == MessageKind.control) {
+        unawaited(_onControlMessage(m));
       }
     });
+
+    // Pre-build shareable credential for QR / short code.
+    localCredential = await PublicCredential.fromIdentity(id);
+
     _presenceSub = node!.presenceUpdates.listen((p) {
       livePresence.removeWhere((e) => e.peerId == p.peerId);
       livePresence.add(p);
@@ -309,6 +324,105 @@ final class MeshController extends ChangeNotifier with WidgetsBindingObserver {
     chat.addLocalChat(text: text.trim(), to: to, messageId: msgId);
     await n.sendChat(text.trim(), to: to);
     notifyListeners();
+  }
+
+  /// Refresh local QR / short-code credential (e.g. after rename).
+  Future<PublicCredential?> refreshLocalCredential() async {
+    final id = identity;
+    if (id == null) return null;
+    localCredential = await PublicCredential.fromIdentity(id);
+    notifyListeners();
+    return localCredential;
+  }
+
+  /// Import credential from QR payload, JSON, or short code (mesh cache).
+  Future<PublicCredential?> importCredential(String raw) async {
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+
+    // Prefer full payload parse; fall back to short-code cache lookup.
+    PublicCredential? cred;
+    try {
+      cred = PublicCredential.parse(text);
+    } on FormatException {
+      cred = offerCache.byShortCode(text);
+      if (cred == null) {
+        // Match short code against already-trusted contacts.
+        for (final c in trustedCredentials.values) {
+          if (ShortCode.matches(text, c.subjectId)) {
+            cred = c;
+            break;
+          }
+        }
+      }
+      if (cred == null) {
+        throw const FormatException(
+          'Unknown short code — ask peer to publish offer or share QR payload',
+        );
+      }
+    }
+
+    if (!await cred.verify()) {
+      throw StateError('credential signature invalid');
+    }
+    if (identity != null && cred.subjectId == identity!.id) {
+      throw StateError('cannot import own credential');
+    }
+
+    trustedCredentials[cred.subjectId] = cred;
+    offerCache.put(cred);
+    chat.addSystem(
+      'Trusted credential: ${cred.displayName.isEmpty ? cred.subjectId : cred.displayName}'
+      ' · ${cred.shortCode}',
+    );
+    status = 'Imported ${cred.shortCode}';
+    notifyListeners();
+    return cred;
+  }
+
+  /// Broadcast local public credential so peers can import via short code.
+  Future<void> publishCredentialOffer({String? to}) async {
+    final n = node;
+    final id = identity;
+    var cred = localCredential;
+    if (n == null || id == null) return;
+    cred ??= await PublicCredential.fromIdentity(id);
+    localCredential = cred;
+
+    await n.send(
+      MeshMessage(
+        id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
+        sourceId: id.id,
+        destinationId: to,
+        kind: MessageKind.control,
+        payload: CredentialWire.encodeOffer(cred),
+        timestamp: DateTime.now().toUtc(),
+      ),
+    );
+    chat.addSystem(
+      'Published credential offer ${cred.shortCode}'
+      '${to == null ? " (broadcast)" : " → $to"}',
+    );
+    status = 'Offer ${cred.shortCode} published';
+    notifyListeners();
+  }
+
+  Future<void> _onControlMessage(MeshMessage m) async {
+    final cred = CredentialWire.tryDecodeOffer(m.payload);
+    if (cred == null) return;
+    try {
+      if (!await cred.verify()) return;
+      if (identity != null && cred.subjectId == identity!.id) return;
+      offerCache.put(cred);
+      chat.addSystem(
+        'Credential offer from '
+        '${cred.displayName.isEmpty ? cred.subjectId : cred.displayName}'
+        ' · short code ${cred.shortCode}',
+      );
+      notifyListeners();
+    } catch (_) {
+      // Ignore malformed control frames.
+    }
   }
 
   Future<void> sendDemoFile() async {

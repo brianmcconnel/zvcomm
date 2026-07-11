@@ -650,4 +650,29 @@ void main() {
       expect(log.thread('p').last.text, isNot(contains('shit')));
     });
   });
+
+  group('PublicCredential', () {
+    test('QR payload round-trips and verifies', () async {
+      final id =
+          await DeviceIdentity.fromSeed('qr-alice', displayName: 'Alice');
+      final cred = await PublicCredential.fromIdentity(id);
+      expect(cred.shortCode, matches(RegExp(r'^[0-9A-Z]{4}-[0-9A-Z]{4}$')));
+      final payload = cred.toQrPayload();
+      expect(payload, startsWith('zvcomm:cred:v1:'));
+      final parsed = PublicCredential.parse(payload);
+      expect(parsed.subjectId, id.id);
+      expect(parsed.displayName, 'Alice');
+      expect(await parsed.verify(), isTrue);
+      expect(ShortCode.matches(cred.shortCode, id.id), isTrue);
+    });
+
+    test('offer cache resolves short code', () async {
+      final id = await DeviceIdentity.fromSeed('qr-bob', displayName: 'Bob');
+      final cred = await PublicCredential.fromIdentity(id);
+      final cache = CredentialOfferCache();
+      cache.put(cred);
+      final found = cache.byShortCode(cred.shortCode.toLowerCase());
+      expect(found?.subjectId, id.id);
+    });
+  });
 }

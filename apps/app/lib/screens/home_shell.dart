@@ -3,6 +3,7 @@ import 'package:ui/ui.dart';
 
 import '../services/mesh_controller.dart';
 import 'chat_screen.dart';
+import 'credentials_screen.dart';
 import 'peers_screen.dart';
 import 'settings_screen.dart';
 import 'status_screen.dart';
@@ -37,6 +38,7 @@ class _HomeShellState extends State<HomeShell> {
         },
       ),
       ChatScreen(mesh: mesh),
+      CredentialsScreen(mesh: mesh),
       StatusScreen(mesh: mesh),
       SettingsScreen(
         mesh: mesh,
@@ -83,6 +85,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.chat_bubble_outline),
             selectedIcon: Icon(Icons.chat_bubble),
             label: 'Chat',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.qr_code_2_outlined),
+            selectedIcon: Icon(Icons.qr_code_2),
+            label: 'Creds',
           ),
           NavigationDestination(
             icon: Icon(Icons.insights_outlined),

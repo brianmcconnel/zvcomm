@@ -81,6 +81,9 @@ dart run apps/cli/bin/cli.dart enroll --seed phone --name Phone --ca ca.json --o
 # Secure session demo
 dart run apps/cli/bin/cli.dart noise-demo
 
+# QR + short-code public credential
+dart run apps/cli/bin/cli.dart cred --seed alice --name Alice
+
 # Run the Flutter app (mock discovery demo)
 cd apps/app && flutter run -d linux   # or chrome, windows, macos, …
 ```

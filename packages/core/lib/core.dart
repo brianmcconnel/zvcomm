@@ -29,6 +29,7 @@ export 'src/crypto/identity.dart';
 export 'src/crypto/secure_session.dart';
 export 'src/crypto/identity_store.dart';
 export 'src/crypto/enrollment.dart';
+export 'src/crypto/credential_exchange.dart';
 export 'src/mesh/secure_mesh.dart';
 export 'src/transfer/file_transfer.dart';
 export 'src/chat/chat_log.dart';
