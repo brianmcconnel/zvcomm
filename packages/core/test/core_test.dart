@@ -632,6 +632,61 @@ void main() {
       expect(after.length, dirty.length);
     });
 
+    test('ChatLog reactions toggle and wire round-trip', () {
+      final log = ChatLog();
+      log.addLocalChat(text: 'hello', to: 'bob', messageId: 'm1');
+      final updated = log.toggleReaction(
+        messageId: 'm1',
+        emoji: '👍',
+        reactorId: 'alice',
+      );
+      expect(updated, isNotNull);
+      expect(updated!.reactions['👍'], contains('alice'));
+      log.toggleReaction(messageId: 'm1', emoji: '👍', reactorId: 'alice');
+      expect(log.findById('m1')!.reactions.containsKey('👍'), isFalse);
+
+      final bytes = ChatReactionWire.encode(
+        messageId: 'm1',
+        emoji: '❤️',
+        reactorId: 'bob',
+      );
+      final event = ChatReactionWire.tryDecode(bytes);
+      expect(event?.emoji, '❤️');
+      expect(event?.messageId, 'm1');
+    });
+
+    test('TypingPresence status text and wire', () {
+      final tp = TypingPresence();
+      final gKey = TypingPresence.threadKey(groupId: 'g1');
+      tp.setTyping(
+        threadKey: gKey,
+        peerId: 'a',
+        typing: true,
+        displayName: 'Alice',
+      );
+      expect(tp.statusText(gKey), 'Alice is typing…');
+      tp.setTyping(
+        threadKey: gKey,
+        peerId: 'b',
+        typing: true,
+        displayName: 'Bob',
+      );
+      expect(tp.statusText(gKey), 'Alice and Bob are typing…');
+      tp.setTyping(threadKey: gKey, peerId: 'a', typing: false);
+      expect(tp.statusText(gKey), 'Bob is typing…');
+
+      final bytes = ChatTypingWire.encode(
+        peerId: 'a',
+        typing: true,
+        groupId: 'g1',
+        displayName: 'Alice',
+      );
+      final ev = ChatTypingWire.tryDecode(bytes);
+      expect(ev?.typing, isTrue);
+      expect(ev?.groupId, 'g1');
+      expect(ev?.displayName, 'Alice');
+    });
+
     test('ChatLog censors local and remote lines', () {
       MessageCensor.pattern = LanguagePattern.english;
       final log = ChatLog();
@@ -675,4 +730,746 @@ void main() {
       expect(found?.subjectId, id.id);
     });
   });
+
+  group('Social: groups, block, report', () {
+    test('BlockList blocks and unblocks', () {
+      final list = BlockList();
+      expect(list.isBlocked('a'), isFalse);
+      list.block('a', displayName: 'Alice', reason: 'spam');
+      expect(list.isBlocked('a'), isTrue);
+      expect(list.entries.single.displayName, 'Alice');
+      final json = list.toJson();
+      final restored = BlockList.fromJson(json);
+      expect(restored.isBlocked('a'), isTrue);
+      restored.unblock('a');
+      expect(restored.isBlocked('a'), isFalse);
+    });
+
+    test('GroupStore create invite membership', () {
+      final store = GroupStore();
+      final g = store.create(
+        name: 'Ops',
+        ownerId: 'owner',
+        members: ['bob', 'carol'],
+      );
+      expect(g.isMember('owner'), isTrue);
+      expect(g.isAdmin('owner'), isTrue);
+      expect(g.memberCount, 3);
+      store.addMember(g.id, 'dave');
+      expect(store[g.id]!.isMember('dave'), isTrue);
+      store.removeMember(g.id, 'bob');
+      expect(store[g.id]!.isMember('bob'), isFalse);
+      // Cannot remove owner.
+      store.removeMember(g.id, 'owner');
+      expect(store[g.id]!.isMember('owner'), isTrue);
+
+      final wire = GroupWire.encodeInvite(store[g.id]!);
+      final event = GroupWire.tryDecode(wire);
+      expect(event, isNotNull);
+      expect(event!.type, GroupWire.inviteType);
+      expect(event.group!.name, 'Ops');
+    });
+
+    test('GroupChatWire round-trip and ChatLog group thread', () {
+      final payload = GroupChatWire.encode(groupId: 'g-1', text: 'hello group');
+      final parsed = GroupChatWire.tryParse(payload);
+      expect(parsed?.groupId, 'g-1');
+      expect(parsed?.text, 'hello group');
+
+      final log = ChatLog();
+      log.addLocalChat(
+        text: 'hi',
+        messageId: '1',
+        groupId: 'g-1',
+      );
+      expect(log.groupThread('g-1').single.text, 'hi');
+      expect(log.thread(null), isEmpty);
+
+      final msg = MeshMessage(
+        id: '2',
+        sourceId: 'bob',
+        kind: MessageKind.chat,
+        payload: Uint8List.fromList(utf8.encode(payload)),
+        timestamp: DateTime.now().toUtc(),
+      );
+      log.addRemoteChat(msg);
+      expect(log.groupThread('g-1').length, 2);
+      expect(log.groupThread('g-1').last.peerId, 'bob');
+    });
+
+    test('UserReport wire and store', () {
+      final report = UserReport(
+        id: 'r1',
+        subjectId: 'bad',
+        reporterId: 'me',
+        category: ReportCategory.harassment,
+        details: 'unwanted messages',
+        createdAt: DateTime.now().toUtc(),
+      );
+      final bytes = ReportWire.encode(report);
+      final decoded = ReportWire.tryDecode(bytes);
+      expect(decoded, isNotNull);
+      expect(decoded!.category, ReportCategory.harassment);
+      expect(decoded.details, 'unwanted messages');
+
+      final store = ReportStore()..add(report);
+      expect(store.all, hasLength(1));
+      final round = ReportStore.fromJson(store.toJson());
+      expect(round.all.single.subjectId, 'bad');
+    });
+  });
+
+  group('VoiceChannel', () {
+    test('PCM WAV round-trip helpers', () {
+      final pcm = Uint8List.fromList([0, 1, 2, 3, 4, 5, 6, 7]);
+      final wav = pcm16ToWav(pcm, sampleRate: 8000, channels: 1);
+      expect(wav.length, 44 + pcm.length);
+      final restored = wavToPcm16(wav);
+      expect(restored, pcm);
+    });
+
+    test('group fan-out tags gid and delivers to members', () async {
+      final medium = MockMedium();
+      final a = MockTransport(
+        medium: medium,
+        localId: 'va',
+        displayName: 'A',
+        position: const SimPoint(0, 0),
+      );
+      final b = MockTransport(
+        medium: medium,
+        localId: 'vb',
+        displayName: 'B',
+        position: const SimPoint(1, 0),
+      );
+      final c = MockTransport(
+        medium: medium,
+        localId: 'vc',
+        displayName: 'C',
+        position: const SimPoint(2, 0),
+      );
+      final nodeA = MeshNode(
+        localId: 'va',
+        displayName: 'A',
+        transports: TransportManager([a]),
+      );
+      final nodeB = MeshNode(
+        localId: 'vb',
+        displayName: 'B',
+        transports: TransportManager([b]),
+      );
+      final nodeC = MeshNode(
+        localId: 'vc',
+        displayName: 'C',
+        transports: TransportManager([c]),
+      );
+      await nodeA.start();
+      await nodeB.start();
+      await nodeC.start();
+      await Future.wait([
+        nodeA.peerUpdates
+            .firstWhere((p) => p.id == 'vb')
+            .timeout(const Duration(seconds: 3)),
+        nodeA.peerUpdates
+            .firstWhere((p) => p.id == 'vc')
+            .timeout(const Duration(seconds: 3)),
+      ]);
+
+      final voiceA = VoiceChannelService(node: nodeA)..start();
+      final voiceB = VoiceChannelService(node: nodeB)..start();
+      final voiceC = VoiceChannelService(node: nodeC)..start();
+      // C pretends not to be in the group.
+      voiceC.acceptIncoming = (info) => info.groupId != 'g-ops';
+
+      final doneB = Completer<VoiceEvent>();
+      final doneC = Completer<VoiceEvent>();
+      final subB = voiceB.events.listen((e) {
+        if (e.kind == VoiceEventKind.rxComplete && !doneB.isCompleted) {
+          doneB.complete(e);
+        }
+      });
+      final subC = voiceC.events.listen((e) {
+        if (e.kind == VoiceEventKind.rxComplete && !doneC.isCompleted) {
+          doneC.complete(e);
+        }
+      });
+
+      final pcm = Uint8List(400);
+      await voiceA.sendPcmBurst(
+        pcm,
+        recipients: ['vb', 'vc'],
+        groupId: 'g-ops',
+      );
+
+      final eventB = await doneB.future.timeout(const Duration(seconds: 5));
+      expect(eventB.transmission?.groupId, 'g-ops');
+      expect(eventB.pcm!.length, pcm.length);
+
+      // C filtered out — should not complete.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(doneC.isCompleted, isFalse);
+
+      await subB.cancel();
+      await subC.cancel();
+      await voiceA.dispose();
+      await voiceB.dispose();
+      await voiceC.dispose();
+      await nodeA.dispose();
+      await nodeB.dispose();
+      await nodeC.dispose();
+      await a.dispose();
+      await b.dispose();
+      await c.dispose();
+    });
+
+    test('PTT burst delivers PCM over mock mesh', () async {
+      final medium = MockMedium();
+      final a = MockTransport(
+        medium: medium,
+        localId: 'voice-a',
+        displayName: 'A',
+        position: const SimPoint(0, 0),
+      );
+      final b = MockTransport(
+        medium: medium,
+        localId: 'voice-b',
+        displayName: 'B',
+        position: const SimPoint(1, 0),
+      );
+      final nodeA = MeshNode(
+        localId: 'voice-a',
+        displayName: 'A',
+        transports: TransportManager([a]),
+      );
+      final nodeB = MeshNode(
+        localId: 'voice-b',
+        displayName: 'B',
+        transports: TransportManager([b]),
+      );
+      await nodeA.start();
+      await nodeB.start();
+      await nodeA.peerUpdates
+          .firstWhere((p) => p.id == 'voice-b')
+          .timeout(const Duration(seconds: 3));
+
+      final voiceA = VoiceChannelService(node: nodeA)..start();
+      final voiceB = VoiceChannelService(node: nodeB)..start();
+
+      final done = Completer<VoiceEvent>();
+      final sub = voiceB.events.listen((e) {
+        if (e.kind == VoiceEventKind.rxComplete && !done.isCompleted) {
+          done.complete(e);
+        }
+      });
+
+      // ~50 ms of 8 kHz mono s16 + a simple ramp.
+      final pcm = Uint8List(800);
+      for (var i = 0; i < pcm.length; i += 2) {
+        final sample = (i * 17) & 0x7fff;
+        pcm[i] = sample & 0xff;
+        pcm[i + 1] = (sample >> 8) & 0xff;
+      }
+
+      await voiceA.sendPcmBurst(pcm, to: 'voice-b');
+      final event = await done.future.timeout(const Duration(seconds: 5));
+      expect(event.pcm, isNotNull);
+      expect(event.pcm!.length, pcm.length);
+      expect(event.transmission?.sourceId, 'voice-a');
+      expect(event.pcm!.sublist(0, 8), pcm.sublist(0, 8));
+
+      await sub.cancel();
+      await voiceA.dispose();
+      await voiceB.dispose();
+      await nodeA.dispose();
+      await nodeB.dispose();
+      await a.dispose();
+      await b.dispose();
+    });
+  });
+
+  group('StatsHistory', () {
+    test('records rates over time', () {
+      final h = StatsHistory(capacity: 10);
+      final s = MeshStats();
+      final t0 = DateTime.utc(2020, 1, 1, 0, 0, 0);
+      h.record(stats: s, peerCount: 1, presenceCount: 0, at: t0);
+      s.originated = 10;
+      s.delivered = 5;
+      h.record(
+        stats: s,
+        peerCount: 2,
+        presenceCount: 1,
+        at: t0.add(const Duration(seconds: 2)),
+      );
+      final last = h.latest!;
+      expect(last.originatedPerSec, closeTo(5, 0.01));
+      expect(last.deliveredPerSec, closeTo(2.5, 0.01));
+      expect(last.peerCount, 2);
+      expect(h.length, 2);
+    });
+  });
+
+  group('FamilySafety', () {
+    test('SafetyMode parse accepts kid/teen aliases', () {
+      expect(SafetyMode.parse('teen'), SafetyMode.teen);
+      expect(SafetyMode.parse('child'), SafetyMode.child);
+      expect(SafetyMode.parse('kid'), SafetyMode.child);
+      expect(SafetyMode.parse('mediated'), SafetyMode.child);
+      expect(SafetyMode.parse(null), SafetyMode.teen);
+    });
+
+    test('wire link/copy/mediate/status/settle round-trip', () {
+      final link = FamilySafetyWire.encodeLink(
+        guardianId: 'parent-1',
+        guardianName: 'Mom',
+        mode: SafetyMode.child,
+        sharedWithIds: const ['teacher-1'],
+        grounded: true,
+        parentIds: const ['parent-1', 'parent-2'],
+        parentNames: const {'parent-1': 'Mom', 'parent-2': 'Dad'},
+      );
+      final linkEv = FamilySafetyWire.tryDecode(link)!;
+      expect(linkEv.type, FamilySafetyWire.linkType);
+      expect(linkEv.body['guardianId'], 'parent-1');
+      expect(SafetyMode.parse(linkEv.body['mode'] as String?), SafetyMode.child);
+      expect(linkEv.body['grounded'], isTrue);
+      expect(linkEv.body['parentIds'], containsAll(['parent-1', 'parent-2']));
+
+      final ward = WardProfile(
+        wardId: 'kid-1',
+        displayName: 'Kid',
+        mode: SafetyMode.teen,
+        grounded: false,
+        parentIds: const ['parent-1', 'parent-2'],
+        parentNames: const {'parent-1': 'Mom', 'parent-2': 'Dad'},
+        createdAt: DateTime.utc(2026, 1, 1),
+        statusUpdatedAt: DateTime.utc(2026, 1, 5),
+        statusById: 'parent-2',
+        statusByName: 'Dad',
+      );
+      expect(ward.privilegeLabel, 'Teen');
+      expect(ward.parentsLabel(selfId: 'parent-1'), 'You · Dad');
+
+      final status = FamilySafetyWire.encodeStatus(
+        ward: ward,
+        updatedById: 'parent-2',
+        updatedByName: 'Dad',
+      );
+      final statusEv = FamilySafetyWire.tryDecode(status)!;
+      expect(statusEv.type, FamilySafetyWire.statusType);
+      final remoteWard = WardProfile.fromJson(
+        Map<String, Object?>.from(statusEv.body['ward']! as Map),
+      );
+      expect(remoteWard.privilegeLabel, 'Teen');
+      expect(remoteWard.parentIds, hasLength(2));
+
+      final settle = FamilySafetyWire.encodeSettle(
+        requestId: 'req-1',
+        approved: true,
+        byId: 'parent-1',
+        byName: 'Mom',
+        fromId: 'kid-1',
+        fromName: 'Kid',
+        toLabel: 'Friend',
+      );
+      final settleEv = FamilySafetyWire.tryDecode(settle)!;
+      expect(settleEv.type, FamilySafetyWire.settleType);
+      expect(settleEv.body['approved'], isTrue);
+
+      final copy = FamilySafetyWire.encodeCopy(
+        fromId: 'teen-1',
+        fromName: 'Alex',
+        toLabel: 'Sam',
+        text: 'hello',
+        toPeerId: 'peer-2',
+      );
+      final copyEv = FamilySafetyWire.tryDecode(copy)!;
+      expect(copyEv.type, FamilySafetyWire.copyType);
+      expect(copyEv.body['text'], 'hello');
+
+      final pending = PendingMediatedMessage(
+        requestId: 'req-1',
+        fromId: 'kid-1',
+        fromName: 'Kid',
+        toPeerId: 'friend',
+        toLabel: 'Friend',
+        text: 'can I go?',
+        createdAt: DateTime.utc(2026, 1, 1),
+      );
+      final req = FamilySafetyWire.encodeMediateRequest(pending);
+      final reqEv = FamilySafetyWire.tryDecode(req)!;
+      expect(reqEv.type, FamilySafetyWire.mediateReqType);
+      final decoded = PendingMediatedMessage.fromJson(reqEv.body);
+      expect(decoded.requestId, 'req-1');
+      expect(decoded.text, 'can I go?');
+
+      final dec = FamilySafetyWire.encodeMediateDecision(
+        requestId: 'req-1',
+        approved: true,
+        guardianId: 'parent-1',
+        text: 'can I go?',
+        toPeerId: 'friend',
+      );
+      final decEv = FamilySafetyWire.tryDecode(dec)!;
+      expect(decEv.type, FamilySafetyWire.mediateDecisionType);
+      expect(decEv.body['approved'], isTrue);
+    });
+
+    test('store wards, pending, feed, co-parent status', () {
+      final s = FamilySafetyStore();
+      s.putWard(
+        WardProfile(
+          wardId: 'kid-1',
+          displayName: 'Kid',
+          mode: SafetyMode.child,
+          grounded: true,
+          parentIds: const ['mom', 'dad'],
+          parentNames: const {'mom': 'Mom', 'dad': 'Dad'},
+          createdAt: DateTime.utc(2026, 1, 1),
+          statusUpdatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      expect(s.isGuardian, isTrue);
+      expect(s.wards['kid-1']!.grounded, isTrue);
+      expect(s.wards['kid-1']!.privilegeLabel, 'Kid · Grounded');
+
+      // Newer co-parent status wins.
+      final newer = WardProfile(
+        wardId: 'kid-1',
+        displayName: 'Kid',
+        mode: SafetyMode.teen,
+        grounded: false,
+        parentIds: const ['mom', 'dad'],
+        parentNames: const {'mom': 'Mom', 'dad': 'Dad'},
+        createdAt: DateTime.utc(2026, 1, 1),
+        statusUpdatedAt: DateTime.utc(2026, 1, 10),
+        statusById: 'dad',
+        statusByName: 'Dad',
+      );
+      expect(s.applyRemoteWardStatus(newer), isTrue);
+      expect(s.wards['kid-1']!.mode, SafetyMode.teen);
+      expect(s.wards['kid-1']!.grounded, isFalse);
+
+      // Stale status ignored.
+      final stale = newer.copyWith(
+        grounded: true,
+        statusUpdatedAt: DateTime.utc(2026, 1, 2),
+      );
+      expect(s.applyRemoteWardStatus(stale), isFalse);
+      expect(s.wards['kid-1']!.grounded, isFalse);
+
+      s.setMyPolicy(
+        MySafetyPolicy(
+          guardianId: 'mom',
+          guardianName: 'Mom',
+          parentIds: const ['mom', 'dad'],
+          parentNames: const {'mom': 'Mom', 'dad': 'Dad'},
+          mode: SafetyMode.teen,
+          grounded: true,
+          updatedAt: DateTime.utc(2026, 1, 2),
+        ),
+      );
+      expect(s.isWard, isTrue);
+      expect(s.iAmGrounded, isTrue);
+      expect(s.myPolicy!.allParentIds, containsAll(['mom', 'dad']));
+      expect(s.myPolicy!.parentsLabel, 'Mom · Dad');
+
+      s.addPending(
+        PendingMediatedMessage(
+          requestId: 'r1',
+          fromId: 'kid-1',
+          fromName: 'Kid',
+          toLabel: 'Everyone',
+          text: 'hi',
+          createdAt: DateTime.utc(2026, 1, 3),
+        ),
+      );
+      s.addPending(
+        PendingMediatedMessage(
+          requestId: 'r2',
+          fromId: 'other',
+          fromName: 'Other',
+          toLabel: 'Everyone',
+          text: 'nope',
+          createdAt: DateTime.utc(2026, 1, 3),
+        ),
+      );
+      expect(s.hasPending, isTrue);
+      s.clearPendingForWard('kid-1');
+      expect(s.pendingApprovals, hasLength(1));
+      expect(s.pendingApprovals.first.fromId, 'other');
+      s.removePending('r2');
+      expect(s.hasPending, isFalse);
+
+      s.addCopy(
+        SafetyCopy(
+          id: 'c1',
+          fromId: 'teen-1',
+          fromName: 'Alex',
+          toLabel: 'Sam',
+          text: 'yo',
+          at: DateTime.utc(2026, 1, 4),
+        ),
+      );
+      expect(s.activityFeed, hasLength(1));
+
+      final round = FamilySafetyStore.fromJson(s.toJson());
+      expect(round.wards.containsKey('kid-1'), isTrue);
+      expect(round.wards['kid-1']!.parentIds, containsAll(['mom', 'dad']));
+      expect(round.myPolicy?.mode, SafetyMode.teen);
+      expect(round.myPolicy?.grounded, isTrue);
+    });
+  });
+
+
+
+
+  group('DiscussNotes', () {
+    test('discretion parse and note json', () {
+      expect(NoteDiscretion.parse('private'), NoteDiscretion.private);
+      expect(NoteDiscretion.parse('parents'), NoteDiscretion.parents);
+      final n = DiscussNote(
+        id: 'dn1',
+        fromId: 'teen',
+        fromName: 'Alex',
+        text: 'want to talk first',
+        discretion: NoteDiscretion.private,
+        createdAt: DateTime.utc(2026, 3, 1),
+      );
+      final round = DiscussNote.fromJson(n.toJson());
+      expect(round.text, 'want to talk first');
+      expect(round.discretion, NoteDiscretion.private);
+      expect(round.isOpen, isTrue);
+
+      final s = FamilySafetyStore();
+      s.putDiscussNote(n);
+      expect(s.hasOpenDiscussNotes, isTrue);
+      s.putDiscussNote(
+        n.copyWith(
+          status: DiscussNoteStatus.closed,
+          acknowledgedByName: 'Mom',
+        ),
+      );
+      expect(s.openDiscussNotes, isEmpty);
+      expect(s.discussNote('dn1')!.status, DiscussNoteStatus.closed);
+
+      final wire = FamilySafetyWire.encodeDiscussNote(n);
+      final ev = FamilySafetyWire.tryDecode(wire)!;
+      expect(ev.type, FamilySafetyWire.discussNoteType);
+    });
+  });
+
+  group('TimeLog', () {
+    test('slots, empty hours, prompt', () {
+      final s = TimeLogStore();
+      final day = DateTime(2026, 7, 12, 14, 30);
+      expect(s.shouldPromptNow(now: day), isTrue);
+      s.setSlot(localDay: day, hour: 14, activity: 'Work');
+      expect(s.shouldPromptNow(now: day), isFalse);
+      expect(s.filledCount(day), 1);
+      expect(s.emptyHours(day), hasLength(23));
+      expect(s.slot(day, 14)!.activity, 'Work');
+      final round = TimeLogStore.fromJson(s.toJson());
+      expect(round.slot(day, 14)!.activity, 'Work');
+      expect(TimeLogEntry.formatHour(0), '12:00 AM');
+      expect(TimeLogEntry.formatHour(13), '1:00 PM');
+    });
+  });
+
+  group('ChatImage', () {
+    test('wire encode/decode and ChatLog remote image', () {
+      final bytes = Uint8List.fromList(List<int>.generate(64, (i) => i));
+      final raw = ChatImageWire.encode(
+        fileName: 'shot.png',
+        mimeType: 'image/png',
+        bytes: bytes,
+        groupId: 'g-1',
+        caption: 'hi',
+      );
+      final parsed = ChatImageWire.tryParse(raw)!;
+      expect(parsed.fileName, 'shot.png');
+      expect(parsed.mimeType, 'image/png');
+      expect(parsed.groupId, 'g-1');
+      expect(parsed.caption, 'hi');
+      expect(parsed.bytes, bytes);
+
+      final log = ChatLog();
+      log.addRemoteChat(
+        MeshMessage(
+          id: 'm1',
+          sourceId: 'alice',
+          kind: MessageKind.chat,
+          payload: Uint8List.fromList(utf8.encode(raw)),
+          timestamp: DateTime.utc(2026, 1, 1),
+        ),
+        senderName: 'Alice',
+      );
+      final line = log.groupThread('g-1').single;
+      expect(line.isImage, isTrue);
+      expect(line.imageName, 'shot.png');
+      expect(line.imageBytes, bytes);
+      expect(line.senderName, 'Alice');
+    });
+
+    test('rejects oversized image', () {
+      final big = Uint8List(ChatImageWire.maxBytes + 1);
+      expect(
+        () => ChatImageWire.encode(
+          fileName: 'big.jpg',
+          mimeType: 'image/jpeg',
+          bytes: big,
+        ),
+        throwsStateError,
+      );
+    });
+  });
+
+  group('Calendar', () {
+    test('event day overlap and json round-trip', () {
+      final start = DateTime.utc(2026, 7, 15, 14, 0);
+      final end = DateTime.utc(2026, 7, 15, 15, 30);
+      final e = CalendarEvent(
+        id: 'cal-1',
+        title: 'Dinner',
+        start: start,
+        end: end,
+        scope: CalendarScope.family,
+        scopeId: 'family',
+        creatorId: 'mom',
+        creatorName: 'Mom',
+        audienceIds: const ['mom', 'dad', 'kid'],
+        updatedAt: DateTime.utc(2026, 7, 1),
+      );
+      expect(e.overlapsDay(DateTime.utc(2026, 7, 15)), isTrue);
+      expect(e.overlapsDay(DateTime.utc(2026, 7, 16)), isFalse);
+      expect(e.scope.label, 'Family');
+
+      final decoded = CalendarEvent.fromJson(e.toJson());
+      expect(decoded.title, 'Dinner');
+      expect(decoded.scope, CalendarScope.family);
+      expect(decoded.audienceIds, containsAll(['mom', 'dad', 'kid']));
+    });
+
+    test('store scopes and wire upsert/delete', () {
+      final s = CalendarStore();
+      final personal = CalendarEvent(
+        id: 'p1',
+        title: 'Dentist',
+        start: DateTime.utc(2026, 8, 1, 9),
+        end: DateTime.utc(2026, 8, 1, 10),
+        scope: CalendarScope.individual,
+        scopeId: '',
+        creatorId: 'me',
+        creatorName: 'Me',
+        updatedAt: DateTime.utc(2026, 7, 1),
+      );
+      final group = CalendarEvent(
+        id: 'g1',
+        title: 'Practice',
+        start: DateTime.utc(2026, 8, 2, 18),
+        end: DateTime.utc(2026, 8, 2, 19),
+        scope: CalendarScope.group,
+        scopeId: 'g-abc',
+        creatorId: 'me',
+        creatorName: 'Me',
+        updatedAt: DateTime.utc(2026, 7, 2),
+      );
+      final org = CalendarEvent(
+        id: 'o1',
+        title: 'Town hall',
+        start: DateTime.utc(2026, 8, 3, 12),
+        end: DateTime.utc(2026, 8, 3, 13),
+        scope: CalendarScope.organization,
+        scopeId: 'org-1',
+        creatorId: 'me',
+        creatorName: 'Me',
+        updatedAt: DateTime.utc(2026, 7, 3),
+      );
+      s.put(personal);
+      s.put(group);
+      s.put(org);
+      expect(s.length, 3);
+      expect(s.forScope(CalendarScope.group).single.title, 'Practice');
+      expect(s.forDay(DateTime.utc(2026, 8, 1)).single.title, 'Dentist');
+      expect(s.upcoming(from: DateTime.utc(2026, 8, 1, 8)), hasLength(3));
+
+      final older = personal.copyWith(
+        title: 'stale',
+        updatedAt: DateTime.utc(2026, 6, 1),
+      );
+      s.put(older);
+      expect(s['p1']!.title, 'Dentist'); // newer kept
+
+      final upsert = CalendarWire.encodeUpsert(group);
+      final upEv = CalendarWire.tryDecode(upsert)!;
+      expect(upEv.type, CalendarWire.upsertType);
+      expect(upEv.event!.title, 'Practice');
+
+      final del = CalendarWire.encodeDelete(
+        eventId: 'g1',
+        byId: 'me',
+        scope: 'group',
+        scopeId: 'g-abc',
+      );
+      final delEv = CalendarWire.tryDecode(del)!;
+      expect(delEv.type, CalendarWire.deleteType);
+      expect(delEv.eventId, 'g1');
+
+      final round = CalendarStore.fromJson(s.toJson());
+      expect(round.length, 3);
+      expect(round.forScope(CalendarScope.organization).single.scopeId, 'org-1');
+    });
+
+    test('scope parse aliases', () {
+      expect(CalendarScope.parse('org'), CalendarScope.organization);
+      expect(CalendarScope.parse('family'), CalendarScope.family);
+      expect(CalendarScope.parse(null), CalendarScope.individual);
+    });
+
+    test('sync request wire and removeScope', () {
+      final req = CalendarWire.encodeSyncRequest(
+        scope: CalendarScope.group,
+        scopeId: 'g-1',
+        fromId: 'peer-a',
+      );
+      final ev = CalendarWire.tryDecode(req)!;
+      expect(ev.type, CalendarWire.syncRequestType);
+      expect(ev.requestScope, CalendarScope.group);
+      expect(ev.requestScopeId, 'g-1');
+      expect(ev.requestFromId, 'peer-a');
+
+      final s = CalendarStore();
+      s.put(
+        CalendarEvent(
+          id: 'a',
+          title: 'A',
+          start: DateTime.utc(2026, 1, 1),
+          end: DateTime.utc(2026, 1, 1, 1),
+          scope: CalendarScope.group,
+          scopeId: 'g-1',
+          creatorId: 'me',
+          creatorName: 'Me',
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      s.put(
+        CalendarEvent(
+          id: 'b',
+          title: 'B',
+          start: DateTime.utc(2026, 1, 2),
+          end: DateTime.utc(2026, 1, 2, 1),
+          scope: CalendarScope.group,
+          scopeId: 'g-2',
+          creatorId: 'me',
+          creatorName: 'Me',
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      expect(s.removeScope(CalendarScope.group, 'g-1'), 1);
+      expect(s.length, 1);
+      expect(s['b']!.title, 'B');
+    });
+  });
+
+
 }

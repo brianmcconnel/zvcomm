@@ -189,6 +189,10 @@ final class FileTransferService {
   void _onMessage(MeshMessage msg) {
     if (msg.kind != MessageKind.data || msg.payload.isEmpty) return;
     final type = msg.payload[0];
+    // Ignore non-file-transfer data subtypes (e.g. voice 0x10+).
+    if (type < FileTransferWire.offer || type > FileTransferWire.abort) {
+      return;
+    }
     try {
       switch (type) {
         case FileTransferWire.offer:

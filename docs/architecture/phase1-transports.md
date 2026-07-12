@@ -43,7 +43,7 @@ Also accepts plain-text NDEF records containing a `zvcomm:cred:v1:…` URI (QR p
 | Backend | When | License |
 |---------|------|---------|
 | [flutter_p2p_connection](https://pub.dev/packages/flutter_p2p_connection) | Android Wi-Fi Direct + BLE credential exchange | MIT |
-| `LanSoftApTransport` | Desktop / fallback | First-party Apache-2.0 |
+| `LanSoftApTransport` | Desktop / fallback | First-party (Copyright Brian McConnel 2026) |
 
 LAN SoftAP fallback: UDP broadcast discovery + TCP framed links (same `StreamFrameCodec`). Suitable for lab mesh on one subnet; not a true radio SoftAP.
 

@@ -8,6 +8,8 @@ import 'services/mesh_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Warm color-emoji fonts early so the picker never flashes □ glyphs.
+  unawaited(EmojiGlyphs.ensureReady());
   runApp(const ZvcommApp());
 }
 

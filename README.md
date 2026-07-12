@@ -6,7 +6,7 @@ Bluetooth LE · NFC · Wi-Fi P2P · pluggable transports · offline-first · per
 
 | | |
 |---|---|
-| **License** | Apache-2.0 |
+| **License** | Proprietary · Copyright Brian McConnel 2026 |
 | **Stack** | Flutter + Dart (AOT) |
 | **Platforms** | Android, iOS, Linux, macOS, Windows |
 | **Status** | Phase 5 – Extensibility (complete roadmap) |
@@ -188,7 +188,7 @@ See [docs/architecture/phase5-extensibility.md](docs/architecture/phase5-extensi
 
 ## Licensing
 
-- **First-party code:** Apache-2.0
+- **First-party code:** Copyright Brian McConnel 2026 · All rights reserved
 - **Dependencies:** MIT / Apache-2.0 / BSD / ISC / Zlib / 0BSD / public domain only  
 - **No** GPL, LGPL, AGPL, BUSL, or commercial-only plugins  
 - See [docs/licenses/ALLOWLIST.md](docs/licenses/ALLOWLIST.md)
@@ -225,4 +225,4 @@ Download artifacts from the workflow run page. Tags `v*` also create a GitHub Re
 
 ---
 
-Copyright 2026 ZVComm Contributors · Apache-2.0
+Copyright Brian McConnel 2026 · All rights reserved

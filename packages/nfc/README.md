@@ -1,4 +1,4 @@
 # nfc
 
-Part of the [ZVComm](../../README.md) monorepo (`packages/nfc`). Apache-2.0.
+Part of the [ZVComm](../../README.md) monorepo (`packages/nfc`). Copyright Brian McConnel 2026.
 

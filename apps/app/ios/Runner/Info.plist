@@ -78,6 +78,8 @@
 	<string>ZVComm exchanges short-range messages with nearby devices.</string>
 	<key>NFCReaderUsageDescription</key>
 	<string>ZVComm uses NFC to pair devices and bootstrap mesh identity.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ZVComm uses the microphone for walkie-talkie push-to-talk voice over the mesh.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

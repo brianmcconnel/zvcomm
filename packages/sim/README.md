@@ -1,4 +1,4 @@
 # sim
 
-Part of the [ZVComm](../../README.md) monorepo (`packages/sim`). Apache-2.0.
+Part of the [ZVComm](../../README.md) monorepo (`packages/sim`). Copyright Brian McConnel 2026.
 

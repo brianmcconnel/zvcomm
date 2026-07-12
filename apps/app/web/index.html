@@ -31,6 +31,15 @@
 
   <title>app</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Preload color emoji font so the picker never flashes missing glyphs (□).
+       display=block keeps text invisible until the face is ready. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=block"
+    rel="stylesheet"
+    data-zvcomm-emoji-font="1">
 </head>
 <body>
   <!--

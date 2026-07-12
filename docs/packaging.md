@@ -72,4 +72,4 @@ flutter build apk --release --split-per-abi
 
 ## License
 
-Ship `LICENSE` (Apache-2.0) and third-party notices for Flutter + plugins.
+Ship `LICENSE` (Copyright Brian McConnel 2026) and third-party notices for Flutter + plugins.

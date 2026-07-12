@@ -13,6 +13,10 @@
     <uses-permission android:name="android.permission.NFC"/>
     <uses-feature android:name="android.hardware.nfc" android:required="false"/>
 
+    <!-- Walkie-talkie / PTT microphone -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+
     <!-- Wi-Fi Direct / Nearby -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>

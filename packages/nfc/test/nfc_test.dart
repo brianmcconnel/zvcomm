@@ -44,4 +44,36 @@ void main() {
     expect(available, isA<bool>());
     await t.dispose();
   });
+
+  test('NfcBootstrapPayload carries org URI for NFC share/import', () {
+    const orgUri = 'zvcomm:org:v1:eyJpZCI6ImFiYzEyMyIsIm5hbWUiOiJUZXN0IE9yZyJ9';
+    final p = NfcBootstrapPayload.forUri(
+      uri: orgUri,
+      peerId: 'host-1',
+      displayName: 'Host',
+    );
+    expect(p.metadata['kind'], 'org');
+    expect(p.uriPayload, orgUri);
+
+    final restored = NfcBootstrapPayload.fromBytes(p.toBytes());
+    expect(restored.uriPayload, orgUri);
+    expect(restored.peerId, 'host-1');
+    expect(restored.metadata['kind'], 'org');
+    expect(restored.toPeer().metadata['uri'], orgUri);
+  });
+
+  test('NfcBootstrapPayload reads org URI from meta.qr fallback', () {
+    final map = {
+      'v': 3,
+      'id': 'tag',
+      'name': '',
+      'meta': {
+        'kind': 'org',
+        'qr': 'zvcomm:org:v1:abc',
+      },
+    };
+    final bytes = Uint8List.fromList(utf8.encode(jsonEncode(map)));
+    final restored = NfcBootstrapPayload.fromBytes(bytes);
+    expect(restored.uriPayload, 'zvcomm:org:v1:abc');
+  });
 }

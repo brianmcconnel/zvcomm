@@ -187,6 +187,13 @@ final class MockTransport implements Transport {
 
     for (final other in medium.others(this)) {
       if (!medium.inRange(this, other)) continue;
+      final meta = Map<String, String>.from(other._metadata);
+      // Expose sim coordinates for peer map (local mesh plane, meters).
+      final pos = other.position;
+      if (pos != null) {
+        meta['x'] = pos.x.toStringAsFixed(3);
+        meta['y'] = pos.y.toStringAsFixed(3);
+      }
       final peer = Peer(
         id: other.localId,
         displayName: other.displayName,
@@ -194,7 +201,7 @@ final class MockTransport implements Transport {
         rssi: medium.rssiBetween(this, other),
         addresses: {TransportKind.mock: other.localId},
         lastSeen: DateTime.now().toUtc(),
-        metadata: Map<String, String>.from(other._metadata),
+        metadata: meta,
       );
       controller.add(peer);
     }

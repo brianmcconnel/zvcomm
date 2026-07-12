@@ -21,6 +21,8 @@ final class NfcTransport implements Transport, ConnectionlessSend {
       StreamController<Connection>.broadcast();
   final StreamController<PublicCredential> _credentials =
       StreamController<PublicCredential>.broadcast();
+  final StreamController<String> _uriPayloads =
+      StreamController<String>.broadcast();
 
   String _localId = '';
   String _displayName = '';
@@ -30,6 +32,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
   bool _writeOnTap = false;
   Uint8List? _pendingSend;
   PublicCredential? _pendingCredential;
+  String? _pendingUri;
   String _sessionAlert = 'Hold near a ZVComm peer or tag';
 
   @override
@@ -54,8 +57,12 @@ final class NfcTransport implements Transport, ConnectionlessSend {
   /// Stream of public credentials read from NFC tags / peer phones.
   Stream<PublicCredential> get credentialReads => _credentials.stream;
 
-  /// Whether a share-credential write is armed for the next tap.
-  bool get isCredentialShareArmed => _pendingCredential != null;
+  /// Stream of raw `zvcomm:…` URIs (cred **or** org) read from NFC.
+  Stream<String> get uriPayloadReads => _uriPayloads.stream;
+
+  /// Whether a share write is armed for the next tap.
+  bool get isCredentialShareArmed =>
+      _pendingCredential != null || _pendingUri != null;
 
   /// When true, the next discovered writable tag receives our identity NDEF.
   set writeIdentityOnNextTap(bool value) => _writeOnTap = value;
@@ -69,6 +76,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
     String? displayName,
   }) async {
     _pendingCredential = credential;
+    _pendingUri = null;
     _localId = localId ?? credential.subjectId;
     _displayName = displayName ?? credential.displayName;
     _writeOnTap = true;
@@ -76,17 +84,36 @@ final class NfcTransport implements Transport, ConnectionlessSend {
     await _ensureSession(forceRestart: true);
   }
 
-  /// Arm a receive-only session (read peer credential on tap).
-  Future<void> receiveCredentialOnNextTap() async {
+  /// Arm the next NFC tap to write any ZVComm URI (org or credential).
+  Future<void> shareUriOnNextTap(
+    String uri, {
+    required String localId,
+    String displayName = '',
+  }) async {
+    _pendingUri = uri;
     _pendingCredential = null;
-    _writeOnTap = false;
-    _sessionAlert = 'Hold near peer phone or tag to import credentials';
+    _localId = localId;
+    _displayName = displayName;
+    _writeOnTap = true;
+    _sessionAlert = uri.toLowerCase().startsWith('zvcomm:org:')
+        ? 'Hold phones together to share organization'
+        : 'Hold phones together to share credentials';
     await _ensureSession(forceRestart: true);
   }
 
-  /// Clear a pending credential write without stopping discovery.
+  /// Arm a receive-only session (read peer credential / org on tap).
+  Future<void> receiveCredentialOnNextTap() async {
+    _pendingCredential = null;
+    _pendingUri = null;
+    _writeOnTap = false;
+    _sessionAlert = 'Hold near peer phone or tag to import';
+    await _ensureSession(forceRestart: true);
+  }
+
+  /// Clear a pending credential/URI write without stopping discovery.
   void cancelCredentialShare() {
     _pendingCredential = null;
+    _pendingUri = null;
     _writeOnTap = false;
     _sessionAlert = 'Hold near a ZVComm peer or tag';
   }
@@ -119,6 +146,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
   Future<void> stopAdvertising() async {
     _writeOnTap = false;
     _pendingCredential = null;
+    _pendingUri = null;
   }
 
   @override
@@ -172,6 +200,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
       Peer? peer;
       Uint8List? extra;
       PublicCredential? receivedCred;
+      String? receivedUri;
       if (message != null) {
         for (final record in message.records) {
           final payload = _parseRecord(record);
@@ -179,6 +208,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
             peer = payload.toPeer();
             extra = payload.data;
             receivedCred = payload.credential;
+            receivedUri = payload.uriPayload;
             break;
           }
         }
@@ -191,18 +221,34 @@ final class NfcTransport implements Transport, ConnectionlessSend {
       if (receivedCred != null && !_credentials.isClosed) {
         _credentials.add(receivedCred);
       }
+      if (receivedUri != null &&
+          receivedUri.isNotEmpty &&
+          !_uriPayloads.isClosed) {
+        _uriPayloads.add(receivedUri);
+      }
 
-      final shouldWrite =
-          _writeOnTap || _pendingSend != null || _pendingCredential != null;
+      final shouldWrite = _writeOnTap ||
+          _pendingSend != null ||
+          _pendingCredential != null ||
+          _pendingUri != null;
       if (shouldWrite && ndef.isWritable) {
-        final bootstrap = _pendingCredential != null
-            ? NfcBootstrapPayload.forCredential(_pendingCredential!)
-            : NfcBootstrapPayload(
-                peerId: _localId,
-                displayName: _displayName,
-                metadata: _metadata,
-                data: _pendingSend,
-              );
+        final NfcBootstrapPayload bootstrap;
+        if (_pendingCredential != null) {
+          bootstrap = NfcBootstrapPayload.forCredential(_pendingCredential!);
+        } else if (_pendingUri != null) {
+          bootstrap = NfcBootstrapPayload.forUri(
+            uri: _pendingUri!,
+            peerId: _localId,
+            displayName: _displayName,
+          );
+        } else {
+          bootstrap = NfcBootstrapPayload(
+            peerId: _localId,
+            displayName: _displayName,
+            metadata: _metadata,
+            data: _pendingSend,
+          );
+        }
         final record = NdefRecord(
           typeNameFormat: TypeNameFormat.media,
           type: Uint8List.fromList(utf8.encode(ZvcommProtocol.nfcMimeType)),
@@ -212,6 +258,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
         await ndef.write(message: NdefMessage(records: [record]));
         _pendingSend = null;
         _pendingCredential = null;
+        _pendingUri = null;
         _writeOnTap = false;
         _sessionAlert = 'Hold near a ZVComm peer or tag';
       }
@@ -236,16 +283,28 @@ final class NfcTransport implements Transport, ConnectionlessSend {
         return NfcBootstrapPayload.fromBytes(record.payload);
       }
       final text = utf8.decode(record.payload, allowMalformed: true);
-      // QR-style credential URI on a plain text NDEF record.
-      if (text.contains('zvcomm:cred:')) {
-        final start = text.indexOf('zvcomm:cred:');
-        final end = text.indexOf(RegExp(r'[\s]'), start);
-        final uri =
-            end < 0 ? text.substring(start) : text.substring(start, end);
-        try {
-          final cred = PublicCredential.parse(uri.trim());
-          return NfcBootstrapPayload.forCredential(cred);
-        } catch (_) {}
+      // QR-style org or credential URI on a plain text NDEF record.
+      for (final prefix in ['zvcomm:org:', 'zvcomm:cred:']) {
+        if (text.contains(prefix)) {
+          final start = text.indexOf(prefix);
+          final end = text.indexOf(RegExp(r'[\s]'), start);
+          final uri =
+              (end < 0 ? text.substring(start) : text.substring(start, end))
+                  .trim();
+          if (prefix.startsWith('zvcomm:cred:')) {
+            try {
+              return NfcBootstrapPayload.forCredential(
+                PublicCredential.parse(uri),
+              );
+            } catch (_) {
+              return NfcBootstrapPayload.forUri(
+                uri: uri,
+                peerId: 'nfc',
+              );
+            }
+          }
+          return NfcBootstrapPayload.forUri(uri: uri, peerId: 'nfc');
+        }
       }
       if (text.contains('zvcomm://peer/')) {
         final idx = text.indexOf('zvcomm://peer/');
@@ -306,6 +365,7 @@ final class NfcTransport implements Transport, ConnectionlessSend {
     await _discovery.close();
     await _inbound.close();
     await _credentials.close();
+    await _uriPayloads.close();
   }
 }
 

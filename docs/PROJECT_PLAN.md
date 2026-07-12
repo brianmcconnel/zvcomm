@@ -11,7 +11,7 @@
 - Full PKI infrastructure tooling.
 - **No Rust** (as requested). Prefer Dart/Flutter or Kotlin Multiplatform for shared code.
 
-**Overall License for Project:** Apache-2.0 (or dual MIT/Apache-2.0).
+**Overall License for Project:** Proprietary — Copyright Brian McConnel 2026. All rights reserved.
 
 **Document Version:** 2.0 (No-Rust)  
 **Date:** 2026-07-10  

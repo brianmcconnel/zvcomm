@@ -67,15 +67,17 @@ class ShortCodeBadge extends StatelessWidget {
   }
 }
 
-/// QR code card for a credential payload string.
+/// QR code card for a credential or organization payload string.
 class CredentialQrCard extends StatelessWidget {
   final String payload;
   final double size;
+  final String title;
 
   const CredentialQrCard({
     super.key,
     required this.payload,
     this.size = 220,
+    this.title = 'Scan to import credentials',
   });
 
   @override
@@ -87,7 +89,7 @@ class CredentialQrCard extends StatelessWidget {
         child: Column(
           children: [
             Text(
-              'Scan to import credentials',
+              title,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 12),

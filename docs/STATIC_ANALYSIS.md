@@ -46,4 +46,8 @@ Workflow: [`.github/workflows/static-analysis.yml`](../.github/workflows/static-
 - Weekly schedule  
 - Manual: **Actions → Static analysis → Run workflow**  
 
-CodeQL results appear under the repo **Security → Code scanning** tab (requires default setup permissions on first run).
+CodeQL (Actions workflows) results appear under **Security → Code scanning**.
+
+### CodeQL Action versions
+
+Use `github/codeql-action/*@v4` (Node 24). Gitleaks uses `gitleaks/gitleaks-action@v3` (Node 24).

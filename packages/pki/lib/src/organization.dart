@@ -284,6 +284,100 @@ final class Organization {
     }
     return cert.verifyEd25519(ed25519PublicKey);
   }
+
+  /// Verify a delegated-issuer grant (must include `org_issue` capability).
+  Future<bool> verifyIssuerAuthority(MeshCertificate cert) async {
+    if (cert.issuerId != id) return false;
+    if (!cert.isValidAt(DateTime.now().toUtc())) return false;
+    if (!cert.capabilities.contains('org_issue')) return false;
+    return cert.verifyEd25519(ed25519PublicKey);
+  }
+}
+
+/// In-memory TTL cache of organization offers (mesh / NFC / short-code lookup).
+final class OrganizationOfferCache {
+  final Map<String, _CachedOrg> _byCode = {};
+  final Map<String, _CachedOrg> _byId = {};
+  Duration defaultTtl;
+
+  OrganizationOfferCache({this.defaultTtl = const Duration(minutes: 30)});
+
+  void put(Organization org, {Duration? ttl}) {
+    final entry = _CachedOrg(
+      org,
+      DateTime.now().toUtc().add(ttl ?? defaultTtl),
+    );
+    _byCode[ShortCode.normalize(org.shortCode)] = entry;
+    _byId[org.id] = entry;
+  }
+
+  Organization? byShortCode(String code) {
+    _purge();
+    return _byCode[ShortCode.normalize(code)]?.org;
+  }
+
+  Organization? byId(String id) {
+    _purge();
+    return _byId[id]?.org;
+  }
+
+  List<Organization> get all {
+    _purge();
+    return _byId.values.map((e) => e.org).toList(growable: false);
+  }
+
+  void clear() {
+    _byCode.clear();
+    _byId.clear();
+  }
+
+  void _purge() {
+    final now = DateTime.now().toUtc();
+    final expired = <String>[];
+    _byId.forEach((id, e) {
+      if (e.expiresAt.isBefore(now)) expired.add(id);
+    });
+    for (final id in expired) {
+      final e = _byId.remove(id);
+      if (e != null) {
+        _byCode.remove(ShortCode.normalize(e.org.shortCode));
+      }
+    }
+  }
+}
+
+final class _CachedOrg {
+  final Organization org;
+  final DateTime expiresAt;
+  _CachedOrg(this.org, this.expiresAt);
+}
+
+/// Mesh control payload for organization trust anchors.
+abstract final class OrganizationWire {
+  static const typeKey = 'type';
+  static const offerType = 'org_offer';
+
+  static Uint8List encodeOffer(Organization org) {
+    final body = {
+      typeKey: offerType,
+      'org': org.toJson(),
+    };
+    return Uint8List.fromList(utf8.encode(jsonEncode(body)));
+  }
+
+  static Organization? tryDecodeOffer(Uint8List payload) {
+    try {
+      final map = Map<String, Object?>.from(
+        jsonDecode(utf8.decode(payload)) as Map,
+      );
+      if (map[typeKey] != offerType) return null;
+      final raw = map['org'];
+      if (raw is! Map) return null;
+      return Organization.fromJson(Map<String, Object?>.from(raw));
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 /// Why a peer is trusted.
@@ -335,7 +429,8 @@ final class TrustDecision {
       };
 }
 
-/// Local trust store: organizations + direct peers + org-issued externals.
+/// Local trust store: organizations + direct peers + org-issued externals
+/// + delegated issuers authorized by org roots.
 final class TrustStore {
   TrustStore();
 
@@ -343,6 +438,12 @@ final class TrustStore {
   final Map<String, PublicCredential> directPeers = {};
   final Map<String, MeshCertificate> externalCerts = {};
   final Map<String, String> externalOrgBySubject = {};
+
+  /// Delegated issuers: issuer subject id → authority cert (from org root).
+  final Map<String, MeshCertificate> authorizedIssuers = {};
+
+  /// issuer subject id → org root id.
+  final Map<String, String> issuerOrgBySubject = {};
 
   /// Trust an organization as a root for external certificates.
   void trustOrganization(Organization org) {
@@ -359,6 +460,14 @@ final class TrustStore {
       externalCerts.remove(s);
       externalOrgBySubject.remove(s);
     }
+    final issuers = issuerOrgBySubject.entries
+        .where((e) => e.value == orgId)
+        .map((e) => e.key)
+        .toList();
+    for (final s in issuers) {
+      authorizedIssuers.remove(s);
+      issuerOrgBySubject.remove(s);
+    }
   }
 
   /// Trust a peer from direct credential exchange.
@@ -370,17 +479,83 @@ final class TrustStore {
     directPeers.remove(subjectId);
   }
 
-  /// Accept an external member certificate if its issuer org is trusted.
-  Future<TrustDecision> trustExternalCertificate(MeshCertificate cert) async {
-    final org = organizations[cert.issuerId];
+  /// Register a delegated issuer after verifying against a trusted org root.
+  Future<TrustDecision> trustIssuerAuthority(MeshCertificate authority) async {
+    final org = organizations[authority.issuerId];
     if (org == null) {
       return TrustDecision.none(
-        'issuer ${cert.issuerId} is not a trusted organization',
+        'issuer authority org ${authority.issuerId} is not trusted — import org first',
       );
     }
-    if (!await org.verifyMemberCertificate(cert)) {
+    if (!await org.verifyIssuerAuthority(authority)) {
       return const TrustDecision.none(
-          'certificate signature or validity failed');
+        'issuer authority signature, validity, or org_issue capability failed',
+      );
+    }
+    authorizedIssuers[authority.subjectId] = authority;
+    issuerOrgBySubject[authority.subjectId] = org.id;
+    return TrustDecision.organization(
+      subjectId: authority.subjectId,
+      organizationId: org.id,
+      organizationName: org.name,
+      detail: 'authorized issuer serial ${authority.serial}',
+    );
+  }
+
+  /// Accept an external member certificate if signed by a trusted org root
+  /// or by a registered delegated issuer for that org.
+  Future<TrustDecision> trustExternalCertificate(
+    MeshCertificate cert, {
+    MeshCertificate? issuerAuthority,
+  }) async {
+    // Optional: register delegated issuer from package chain first.
+    if (issuerAuthority != null) {
+      final auth = await trustIssuerAuthority(issuerAuthority);
+      if (!auth.isTrusted) {
+        return TrustDecision.none(
+          auth.detail ?? 'bundled issuer authority rejected',
+        );
+      }
+    }
+
+    // Path 1: signed directly by org root.
+    final rootOrg = organizations[cert.issuerId];
+    if (rootOrg != null) {
+      if (!await rootOrg.verifyMemberCertificate(cert)) {
+        return const TrustDecision.none(
+          'certificate signature or validity failed',
+        );
+      }
+      externalCerts[cert.subjectId] = cert;
+      externalOrgBySubject[cert.subjectId] = rootOrg.id;
+      return TrustDecision.organization(
+        subjectId: cert.subjectId,
+        organizationId: rootOrg.id,
+        organizationName: rootOrg.name,
+        detail: 'org-root cert serial ${cert.serial}',
+      );
+    }
+
+    // Path 2: signed by delegated issuer authorized under a trusted org.
+    final authority = authorizedIssuers[cert.issuerId];
+    final orgId = issuerOrgBySubject[cert.issuerId];
+    final org = orgId != null ? organizations[orgId] : null;
+    if (authority == null || org == null) {
+      return TrustDecision.none(
+        'issuer ${cert.issuerId} is not a trusted org or delegated issuer',
+      );
+    }
+    if (!cert.isValidAt(DateTime.now().toUtc())) {
+      return const TrustDecision.none('certificate expired or not yet valid');
+    }
+    if (!await cert.verifyEd25519(authority.publicKey)) {
+      return const TrustDecision.none(
+        'delegated-issuer signature verification failed',
+      );
+    }
+    // Re-check authority still valid under org root.
+    if (!await org.verifyIssuerAuthority(authority)) {
+      return const TrustDecision.none('issuer authority no longer valid');
     }
     externalCerts[cert.subjectId] = cert;
     externalOrgBySubject[cert.subjectId] = org.id;
@@ -388,7 +563,7 @@ final class TrustStore {
       subjectId: cert.subjectId,
       organizationId: org.id,
       organizationName: org.name,
-      detail: 'org-issued cert serial ${cert.serial}',
+      detail: 'delegated-issuer cert serial ${cert.serial}',
     );
   }
 
@@ -442,6 +617,29 @@ final class TrustStore {
       externalCerts.containsKey(subjectId) ||
       organizations.containsKey(subjectId);
 
+  /// Known subject ids tied to [orgId] (root, members, delegated issuers).
+  ///
+  /// Used for org calendar fan-out so events reach trusted org participants.
+  List<String> subjectsForOrganization(String orgId) {
+    final out = <String>{};
+    if (organizations.containsKey(orgId)) out.add(orgId);
+    for (final e in externalOrgBySubject.entries) {
+      if (e.value == orgId) out.add(e.key);
+    }
+    for (final e in issuerOrgBySubject.entries) {
+      if (e.value == orgId) out.add(e.key);
+    }
+    return out.toList();
+  }
+
+  /// Whether [subjectId] is known under trusted org [orgId].
+  bool isOrgSubject(String orgId, String subjectId) {
+    if (subjectId == orgId && organizations.containsKey(orgId)) return true;
+    if (externalOrgBySubject[subjectId] == orgId) return true;
+    if (issuerOrgBySubject[subjectId] == orgId) return true;
+    return false;
+  }
+
   List<Organization> get organizationList {
     final list = organizations.values.toList();
     list.sort((a, b) {
@@ -479,6 +677,8 @@ final class TrustStore {
         'organizations': organizations.values.map((o) => o.toJson()).toList(),
         'directPeers': directPeers.values.map((c) => c.toJson()).toList(),
         'externalCerts': externalCerts.values.map((c) => c.toJson()).toList(),
+        'authorizedIssuers':
+            authorizedIssuers.values.map((c) => c.toJson()).toList(),
       };
 
   factory TrustStore.fromJson(Map<String, Object?> json) {
@@ -502,13 +702,26 @@ final class TrustStore {
         }
       }
     }
+    final issuers = json['authorizedIssuers'];
+    if (issuers is List) {
+      for (final c in issuers) {
+        if (c is Map) {
+          final cert = MeshCertificate.fromJson(Map<String, Object?>.from(c));
+          store.authorizedIssuers[cert.subjectId] = cert;
+          store.issuerOrgBySubject[cert.subjectId] = cert.issuerId;
+        }
+      }
+    }
     final certs = json['externalCerts'];
     if (certs is List) {
       for (final c in certs) {
         if (c is Map) {
           final cert = MeshCertificate.fromJson(Map<String, Object?>.from(c));
           store.externalCerts[cert.subjectId] = cert;
-          store.externalOrgBySubject[cert.subjectId] = cert.issuerId;
+          // Prefer org mapping via delegated issuer when present.
+          final viaIssuer = store.issuerOrgBySubject[cert.issuerId];
+          store.externalOrgBySubject[cert.subjectId] =
+              viaIssuer ?? cert.issuerId;
         }
       }
     }

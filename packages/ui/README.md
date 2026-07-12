@@ -1,4 +1,4 @@
 # ui
 
-Part of the [ZVComm](../../README.md) monorepo (`packages/ui`). Apache-2.0.
+Part of the [ZVComm](../../README.md) monorepo (`packages/ui`). Copyright Brian McConnel 2026.
 

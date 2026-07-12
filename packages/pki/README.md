@@ -1,4 +1,4 @@
 # pki
 
-Part of the [ZVComm](../../README.md) monorepo (`packages/pki`). Apache-2.0.
+Part of the [ZVComm](../../README.md) monorepo (`packages/pki`). Copyright Brian McConnel 2026.
 

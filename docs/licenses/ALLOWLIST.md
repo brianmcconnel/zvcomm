@@ -7,7 +7,7 @@ ZVComm only accepts **permissive** open-source licenses.
 | License | Notes |
 |---------|--------|
 | MIT | |
-| Apache-2.0 | Preferred for code we write |
+| Proprietary | First-party code — Copyright Brian McConnel 2026 |
 | BSD-2-Clause | |
 | BSD-3-Clause | Flutter / Dart SDK |
 | ISC | |
@@ -48,11 +48,11 @@ ZVComm only accepts **permissive** open-source licenses.
 
 ## Process
 
-1. Prefer pure Dart / first-party Apache-2.0 code.
+1. Prefer pure Dart / first-party code (Copyright Brian McConnel 2026).
 2. Before adding a dependency, verify license on pub.dev and in the repo `LICENSE`.
 3. Run `dart run tool/license_check.dart` (also in CI).
 4. If no permissive library exists, **implement it ourselves**.
 
 ## Project license
 
-All first-party ZVComm code is **Apache-2.0**.
+All first-party ZVComm code is **Copyright Brian McConnel 2026** (all rights reserved).
